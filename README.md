@@ -1,82 +1,82 @@
-# Голосовой ввод (RU)
+# Voice Input (RU)
 
-Голосовой ввод в любое поле Windows. Распознавание работает **локально** на модели GigaAM‑v3 от Сбера: интернет не нужен, звук никуда не уходит.
+Russian voice typing into any text field on Windows. Speech recognition runs **locally** on Sber's GigaAM‑v3 model: no internet connection is needed, and audio never leaves your computer.
 
-![Диктовка: текст появляется на «острове» по ходу речи](docs/screenshot-dictation.png)
+![Dictation: text appears on the "island" as you speak](docs/screenshot-dictation.png)
 
-## Как пользоваться
+## How to use
 
-1. Поставь курсор в любое поле (мессенджер, браузер, IDE…) и **дважды быстро нажми `\`**.
-2. Сверху экрана выедет «остров». Говори, текст появляется по ходу речи.
-3. Скажи **«стоп»**, и откроется редактор с распознанным текстом.
-4. Поправь текст при необходимости и скажи **«ок»** (или нажми **ОК** / Enter). Текст вставится туда, где был курсор.
-   Если сказать **«отправить»** или **«энтер»** (или нажать **Отправить** / Ctrl+Enter), текст вставится и сразу отправится: приложение само нажмёт Enter.
+1. Put the cursor in any field (messenger, browser, IDE…) and **quickly press `\` twice**.
+2. An "island" slides down from the top of the screen. Speak, and the text appears as you go.
+3. Say **«стоп»** ("stop"), and an editor opens with the recognized text.
+4. Fix the text if needed and say **«ок»** ("ok"), or press **ОК** / Enter. The text is pasted where the cursor was.
+   If you say **«отправить»** ("send") or **«энтер»** ("enter") instead, or press **Отправить** / Ctrl+Enter, the text is pasted and sent right away: the app presses Enter for you.
 
-![Редактор: поправить текст и вставить или сразу отправить](docs/screenshot-editor.png)
+![Editor: fix the text, then paste it or send it right away](docs/screenshot-editor.png)
 
-Если редактор не нужен, скажи **«отправить»** или **«энтер»** прямо во время записи, последним словом. Тогда текст вставится и отправится сразу, без «стоп».
+If you don't need the editor, say **«отправить»** or **«энтер»** as the last word while still recording. The text is then pasted and sent at once, without «стоп».
 
-| Где | Действие | Голосом | Клавишами |
+| Where | Action | By voice | By keyboard |
 |---|---|---|---|
-| Запись | закончить и открыть редактор | «стоп» в конце фразы | Enter, снова `\\` или жест мышью |
-| Запись | вставить и отправить сразу | «отправить», «энтер» последним словом | — |
-| Запись | отменить | «отмена» отдельной фразой | Esc |
-| Редактор | вставить | «ок», «окей», «готово» последним словом | Enter или кнопка ОК |
-| Редактор | вставить и отправить | «отправить», «отправь», «энтер» последним словом | Ctrl+Enter или кнопка «Отправить» |
-| Редактор | новая строка | — | Shift+Enter |
-| Редактор | отменить | «отмена» | Esc |
+| Recording | finish and open the editor | «стоп» at the end of a phrase | Enter, `\\` again, or the mouse gesture |
+| Recording | paste and send right away | «отправить», «энтер» as the last word | — |
+| Recording | cancel | «отмена» as a separate phrase | Esc |
+| Editor | paste | «ок», «окей», «готово» as the last word | Enter or the ОК button |
+| Editor | paste and send | «отправить», «отправь», «энтер» as the last word | Ctrl+Enter or the «Отправить» button |
+| Editor | new line | — | Shift+Enter |
+| Editor | cancel | «отмена» | Esc |
 
-«Энтер» узнаётся в любом написании, которое выдаёт распознавание: «ентер», «интер», «энтр», Enter, а английское произношение — как «энджер».
+«Энтер» is recognized in any spelling the recognizer produces: «ентер», «интер», «энтр», Enter, and the English pronunciation, which comes out as «энджер».
 
-Во время записи «стоп» и «отправить» срабатывают не мгновенно: после слова приложение ждёт ещё секунду тишины, а на «острове» в это время написано «Готово…» или «Отправлю…». Если за эту секунду продолжить говорить, команда отменится: слово было частью фразы и останется в тексте.
+While recording, «стоп» and «отправить» don't fire instantly: after the word the app waits for one more second of silence, and meanwhile the island shows «Готово…» ("Done…") or «Отправлю…» ("Sending…"). If you keep talking during that second, the command is cancelled: the word was part of the sentence and stays in the text.
 
-![«Отправлю…»: секунда, чтобы передумать](docs/screenshot-send.png)
+![«Отправлю…»: one second to change your mind](docs/screenshot-send.png)
 
-Если 20 секунд ничего не говорить, запись остановится сама, а надиктованное ляжет в буфер обмена.
+If you say nothing for 20 seconds, recording stops by itself, and what you dictated goes to the clipboard.
 
-### Словарь и чистка текста
+### Dictionary and text cleanup
 
-Модель плохо знает программистские слова: «гит» пишет как «гид», «Клода» — как «клада», «Клод Код» — как «кладкод». Такие слова исправляет словарь замен `replacements` в настройках: «гид» → git, «клод», «клот», clod → Claude, «кладкод» → Claude Code, «гитхаб» → GitHub, «пол реквест» → «пулл-реквест». Новые слова дописываются туда же: `"как пишет модель": "как надо"`. Регистр и ё/е не важны, слово заменяется только целиком.
+The model doesn't know programming words well: it writes «гит» (git) as «гид», «Клода» (Claude) as «клада», «Клод Код» (Claude Code) as «кладкод». The `replacements` dictionary in the settings fixes such words: «гид» → git, «клод», «клот», clod → Claude, «кладкод» → Claude Code, «гитхаб» → GitHub, «пол реквест» → «пулл-реквест». New words are added the same way: `"what the model writes": "what it should be"`. Case and ё/е don't matter, and only whole words are replaced.
 
-Слова-паразиты «а-а», «э-э», «м-м», «ммм» убираются из текста (`remove_fillers`). Одиночное «а» не трогается — это союз.
+Filler sounds «а-а», «э-э», «м-м», «ммм» (like "uh" and "um") are removed from the text (`remove_fillers`). A lone «а» is kept: it's a conjunction.
 
-### Bluetooth-наушники
+### Bluetooth headphones
 
-Микрофон Bluetooth-наушников работает только в «телефонном» режиме (Hands-Free): пока он включён, звук в наушниках становится моно и глухим. Поэтому, если системный микрофон — наушники, приложение берёт встроенный микрофон ноутбука, а наушники остаются только для звука. Если другого микрофона нет, используются наушники. Выключается настройкой `avoid_bluetooth_mic`.
+A Bluetooth headset's microphone works only in "phone" mode (Hands-Free), and while it's on, the sound in the headphones turns mono and muffled. So if the system microphone is the headset, the app takes the laptop's built-in microphone instead and leaves the headphones for sound only. If there's no other microphone, the headset is used. This is turned off with the `avoid_bluetooth_mic` setting.
 
-Одиночный `\` печатается как обычно, только с задержкой ~0,35 с: приложение ждёт, не будет ли второго нажатия.
+A single `\` types as usual, just with a ~0.35 s delay: the app waits to see whether a second press follows.
 
-### Жест мышью
+### Mouse gesture
 
-Вместо `\\` можно быстро кликнуть **левой → правой → левой** кнопкой на одном месте. Первый левый клик работает как обычно, им удобно поставить курсор в поле. Правый и второй левый клик проглатываются, контекстное меню не появляется. Во время записи тот же жест её заканчивает.
+Instead of `\\`, you can quickly click **left → right → left** in one spot. The first left click works as usual, which is handy for placing the cursor in a field. The right click and the second left click are swallowed, and no context menu appears. During recording, the same gesture finishes it.
 
-Если после «левый → правый» второго левого клика не последовало, правый клик отдаётся программе обычным образом, только с задержкой до 0,4 с. Обычные правые клики, не сразу после левого, проходят без задержки. Жест включается и выключается в меню трея.
+If no second left click follows "left → right", the right click is passed to the program as usual, only delayed by up to 0.4 s. Ordinary right clicks that don't come right after a left click go through without delay. The gesture is turned on and off in the tray menu.
 
-Если поля ввода нет (активен рабочий стол или панель задач), «остров» появляется на мониторе с курсором мыши, а готовый текст копируется в буфер обмена: его можно вставить через Ctrl+V.
+If there's no input field (the desktop or the taskbar is active), the island appears on the monitor with the mouse cursor, and the finished text is copied to the clipboard, ready to paste with Ctrl+V.
 
-Вставленный текст всегда остаётся в буфере обмена и в истории Win+V. Если вернуться в исходное окно не получилось, приложение ничего не вставляет и не нажимает Enter, а показывает уведомление. Тогда текст можно вставить вручную через Ctrl+V.
+Pasted text always stays in the clipboard and in the Win+V history. If the app couldn't get back to the original window, it pastes nothing and doesn't press Enter, but shows a notification. You can then paste the text yourself with Ctrl+V.
 
-## Стили
+## Styles
 
-В меню трея **«Стиль»** можно выбрать один из пяти вариантов. При выборе «остров» на несколько секунд показывается с примером текста.
+The **«Стиль»** (Style) tray menu offers five options. When you pick one, the island appears for a few seconds with sample text.
 
-![Стили](docs/styles.png)
+![Styles](docs/styles.png)
 
-1. **Остров** — тёмная плашка в духе Dynamic Island.
-2. **Siri** — тёмная карточка с переливающейся подсветкой по краю, как у Apple Intelligence. Подсветка и волна реагируют на голос.
-3. **Тёмное стекло** (по умолчанию) — тёмная полупрозрачная карточка: сквозь неё видно слегка размытое содержимое экрана, по краю — неброское белое свечение, которое дышит вместе с голосом; кружок микрофона красный, кнопки «ОК» и «Отправить» белые.
-4. **Стекло** — светлое матовое стекло: под карточкой размытый снимок того, что было на экране.
-5. **Светлая** — чистая светлая карточка в стиле macOS.
+1. **Остров** (Island): a dark pill in the spirit of Dynamic Island.
+2. **Siri**: a dark card with a shimmering glow along the edge, like Apple Intelligence. The glow and the wave react to your voice.
+3. **Тёмное стекло** (Dark glass, the default): a dark translucent card. The screen shows through it slightly blurred, and a subtle white glow along the edge breathes with your voice; the microphone dot is red, and the «ОК» and «Отправить» buttons are white.
+4. **Стекло** (Glass): light frosted glass, with a blurred snapshot of the screen under the card.
+5. **Светлая** (Light): a clean light card in macOS style.
 
-![Тёмное стекло на разных фонах](docs/dark_glass.png)
+![Dark glass on different backgrounds](docs/dark_glass.png)
 
-Цвет свечения выбирается в меню трея **«Свечение»**: белое, оранжевое, синее, фиолетовое, розовое, зелёное или радуга. При выборе показывается демо. Работает для стилей с подсветкой: «Siri» и «Тёмное стекло».
+The glow color is picked in the **«Свечение»** (Glow) tray menu: white, orange, blue, purple, pink, green or rainbow. Picking one shows a demo. It applies to the styles with a glow: Siri and Dark glass.
 
-![Цвета свечения](docs/glows.png)
+![Glow colors](docs/glows.png)
 
-Картинки пересобираются командами `.venv\Scripts\python.exe tools\render_styles.py` (все стили) и `.venv\Scripts\python.exe tools\render_styles.py dark_glass` (один стиль на ярком, тёмном и светлом фоне), с `--glows` — все цвета свечения. Скриншоты в начале README рисует `.venv\Scripts\python.exe tools\render_screenshots.py`: сцена и текст на них выдуманные, окна на экран не выводятся.
+The images are rebuilt with `.venv\Scripts\python.exe tools\render_styles.py` (all styles) and `.venv\Scripts\python.exe tools\render_styles.py dark_glass` (one style on bright, dark and light backgrounds); `--glows` renders all glow colors. The screenshots at the top of this README are drawn by `.venv\Scripts\python.exe tools\render_screenshots.py`: the scene and the text in them are made up, and no windows are shown on screen.
 
-## Запуск
+## Running
 
 ```bash
 uv sync
@@ -86,74 +86,92 @@ uv sync
 .venv\Scripts\pythonw.exe run.pyw
 ```
 
-Или двойной клик по `run.pyw`, или ярлык **«Голосовой ввод»** на рабочем столе. Ярлык с иконкой (белый микрофон на чёрном, `assets/voice.ico`) создаётся командой `.venv\Scripts\python.exe tools\make_shortcut.py`. Если приложение уже запущено, второй экземпляр не стартует.
+Or double-click `run.pyw`, or use the **«Голосовой ввод»** ("Voice input") shortcut on the desktop. The shortcut with the icon (a white microphone on black, `assets/voice.ico`) is created with `.venv\Scripts\python.exe tools\make_shortcut.py`. If the app is already running, a second instance won't start.
 
-В трее появится синяя иконка с микрофоном. В её меню есть **«Запускать вместе с Windows»** (по умолчанию выключено), а также настройки, лог и выход.
+A blue microphone icon appears in the tray. Its menu has **«Запускать вместе с Windows»** ("Start with Windows", off by default), as well as the settings, the log and exit.
 
-При первом запуске с Hugging Face скачиваются модели (~850 МБ) в `%USERPROFILE%\.cache\huggingface`. Дальше они грузятся с диска за ~3 с, и интернет больше не нужен. Версии моделей закреплены (`PINNED_MODELS` в `engine.py`): скачиваются ровно те файлы, с которыми приложение проверено, так что обновление моделей на Hugging Face ничего не сломает. В репозиторий модели не входят.
+On first launch the models (~850 MB) are downloaded from Hugging Face into `%USERPROFILE%\.cache\huggingface`. After that they load from disk in ~3 s, and no internet is needed anymore. Model versions are pinned (`PINNED_MODELS` in `engine.py`): exactly the files the app was tested with are downloaded, so model updates on Hugging Face won't break anything. The models are not part of the repository.
 
-## Настройки
+## Settings
 
-`%APPDATA%\VoiceInput\config.json` (открывается из меню в трее, после правки нужен перезапуск):
+`%APPDATA%\VoiceInput\config.json` (opened from the tray menu; restart the app after editing):
 
-- `microphone`: `null` — системный микрофон, иначе номер устройства или часть его названия;
-- `avoid_bluetooth_mic`: `true` (по умолчанию) — не брать микрофон Bluetooth-наушников, если есть другой;
-- `pause_ms`: какая пауза считается концом фразы (по умолчанию 700 мс);
-- `command_wait_ms`: сколько ещё ждать тишины после «стоп»/«отправить» во время записи (по умолчанию 1000 мс);
-- `auto_stop_s`: через сколько секунд тишины запись останавливается сама (по умолчанию 20; `0` — никогда);
-- `stop_words`, `ok_words`, `send_words`, `cancel_words`: слова-команды. `~` перед словом (`"~энтер"`) — узнавать его и с одной ошибкой, и латиницей;
-- `replacements`: словарь замен (см. выше); `remove_fillers`: убирать «а-а», «э-э»;
-- `send_key`: чем отправлять после вставки: `enter` (по умолчанию) или `ctrl+enter` для приложений, где Enter переносит строку;
-- `double_tap_ms`: окно для двойного `\`;
-- `mouse_gesture`: жест мышью «левый → правый → левый» (`true`/`false`); `mouse_gesture_ms`: сколько можно ждать между его кликами (по умолчанию 400 мс);
-- `enter_confirms`: `true` — Enter вставляет текст, `false` — Enter переносит строку (вставка кнопкой или голосом);
-- `paste_method`: `clipboard` — вставка через буфер и Ctrl+V; `type` — посимвольный ввод, если какое-то приложение не принимает Ctrl+V;
-- `keep_in_clipboard`: `true` (по умолчанию) — после вставки текст остаётся в буфере; `false` — в буфер возвращается то, что там было раньше;
-- `theme`: стиль окон (`island`, `siri`, `dark_glass`, `glass`, `light`), удобнее переключать из трея;
-- `glow`: цвет свечения (`white`, `orange`, `blue`, `purple`, `pink`, `green`, `rainbow` или `#RRGGBB`); `null` — как задумано в стиле;
-- `claude_voice`: голос озвучки Claude Code (см. ниже): официальный голос Piper (`ru_RU-dmitri-medium`) или `владелец/репозиторий/имя` с Hugging Face; `null` — молчать;
-- `claude_voice_speed`: скорость речи, `1.0` — как обучен голос (по умолчанию `0.9`, чуть медленнее);
-- `claude_voice_summary`: `true` — пересказывать ответ через Haiku, `false` — говорить просто «Готово.»;
-- `log_minutes`: сколько минут хранить лог (по умолчанию 5; `0` — не чистить).
+- `microphone`: `null` for the system microphone, otherwise a device number or part of its name;
+- `avoid_bluetooth_mic`: `true` (default): don't take a Bluetooth headset's microphone if there's another one;
+- `pause_ms`: how long a pause ends a phrase (default 700 ms);
+- `command_wait_ms`: how long to wait for silence after «стоп»/«отправить» while recording (default 1000 ms);
+- `auto_stop_s`: after how many seconds of silence recording stops by itself (default 20; `0` means never);
+- `stop_words`, `ok_words`, `send_words`, `cancel_words`: command words. A `~` before a word (`"~энтер"`) also matches it with one typo and in Latin letters;
+- `replacements`: the replacement dictionary (see above); `remove_fillers`: remove «а-а», «э-э»;
+- `send_key`: what sends after pasting: `enter` (default), or `ctrl+enter` for apps where Enter inserts a line break;
+- `double_tap_ms`: the time window for the double `\`;
+- `mouse_gesture`: the "left → right → left" mouse gesture (`true`/`false`); `mouse_gesture_ms`: how long to wait between its clicks (default 400 ms);
+- `enter_confirms`: `true`: Enter pastes the text; `false`: Enter inserts a line break (paste with the button or by voice);
+- `paste_method`: `clipboard` pastes through the clipboard and Ctrl+V; `type` types character by character, for apps that don't accept Ctrl+V;
+- `keep_in_clipboard`: `true` (default): the text stays in the clipboard after pasting; `false`: whatever was there before is put back;
+- `theme`: window style (`island`, `siri`, `dark_glass`, `glass`, `light`), easier to switch from the tray;
+- `glow`: glow color (`white`, `orange`, `blue`, `purple`, `pink`, `green`, `rainbow` or `#RRGGBB`); `null` means the style's own;
+- `claude_voice`: the voice for Claude Code speech (see below): an official Piper voice (`ru_RU-dmitri-medium`) or `owner/repository/name` on Hugging Face; `null` means silent;
+- `claude_voice_speed`: speech rate; `1.0` is how the voice was trained (default `0.9`, a little slower);
+- `claude_voice_summary`: `true`: summarize the reply with Haiku; `false`: just say «Готово.» ("Done.");
+- `claude_voice_default`: what to speak in chats that had no command: `off` (default): nothing, `questions`: questions only, `all`: everything;
+- `log_minutes`: how many minutes of log to keep (default 5; `0` means never clean up).
 
-Лог пишется в `%APPDATA%\VoiceInput\voice.log`. В нём текст диктовок и названия окон, поэтому записи старше `log_minutes` минут из него удаляются.
+The log is written to `%APPDATA%\VoiceInput\voice.log`. It contains dictated text and window titles, so entries older than `log_minutes` minutes are deleted from it.
 
-## Озвучка Claude Code
+## Claude Code speech
 
-Необязательная добавка: когда Claude Code закончил ход или ждёт тебя, он коротко говорит голосом, что сделано или какой у него вопрос. Например: «Готово: обновил ридми, все тесты прошли» или «Вопрос: закоммитить и запушить изменения?». Речь синтезируется локально, через [Piper](https://github.com/OHF-Voice/piper1-gpl).
+An optional extra: when Claude Code finishes a turn or is waiting for you, it briefly says out loud what it did or what it wants to ask, in the chats where you turned speech on. For example: «Готово: обновил ридми, все тесты прошли» ("Done: updated the README, all tests passed") or «Вопрос: закоммитить и запушить изменения?» ("Question: commit and push the changes?"). Speech is synthesized locally with [Piper](https://github.com/OHF-Voice/piper1-gpl).
 
-- **Claude закончил ход** (хук `Stop`): последний ответ пересказывает модель Haiku через `claude -p`, получается одна фраза до 12 слов. Звучит она через 5–8 секунд после ответа. Если `claude` не установлен или пересказ не удался, звучит просто «Готово.».
-- **Нужно разрешение** (хук `Notification`): «Нужно разрешение на запуск команды».
-- **Вопрос с вариантами** (хук `PreToolUse` на `AskUserQuestion`): сам вопрос.
-- **Пока открыт микрофон голосового ввода** (идёт диктовка или открыт редактор), озвучка ждёт и говорит после. Если начать диктовать посреди фразы, она обрывается. Фраза, которая прождала дольше 3 минут, пропускается. Фразы из нескольких сессий звучат по очереди.
+- **Claude finished a turn** (`Stop` hook): the Haiku model summarizes the last reply through `claude -p` into one phrase of up to 12 words. It plays 5–8 seconds after the reply. If `claude` isn't installed or the summary fails, it just says «Готово.».
+- **Permission needed** (`Notification` hook): «Нужно разрешение на запуск команды» ("Permission needed to run a command").
+- **Multiple-choice question** (`PreToolUse` hook on `AskUserQuestion`): the question itself.
+- **While the voice-input microphone is open** (you're dictating or the editor is open), speech waits and plays afterwards. If you start dictating mid-phrase, it stops. A phrase that has waited longer than 3 minutes is skipped. Phrases from several sessions play one after another.
 
-Хук только записывает задание и сразу возвращает управление Claude, примерно за 0,4 с. Пересказ и речь идут в отдельном фоновом процессе. Пересказ запускается без хуков и без сохранения сессии, поэтому не вызывает новую озвучку и не попадает в историю. Каждый ответ стоит одной короткой просьбы к Haiku из твоего лимита.
+### Which chats speak
 
-Хуки подключаются в `~/.claude/settings.json` (путь к проекту подставь свой):
+By default all chats are silent: with several sessions open at once, voices from all of them would get in each other's way. Speech is turned on for a single chat with a word at the start of a message:
+
+| Message starts with | What this chat speaks |
+|---|---|
+| «озвучивай» or «озвучивай всё» ("speak", "speak everything") | everything: the end of every turn, permission requests and questions |
+| «озвучивай вопросы» or «озвучивай только вопросы» ("speak questions", "speak only questions") | questions only: permission requests, multiple-choice questions, and the end of a turn if it ends with a question |
+| «не озвучивай» or «молчи» ("don't speak", "be quiet") | nothing |
+
+If the message is nothing but the command, it isn't sent to Claude and doesn't use up a turn; the voice confirms instead: «Буду озвучивать только вопросы.» ("I'll speak only questions."). If a task follows the command («Озвучивай вопросы. Почини тесты», "Speak questions. Fix the tests"), Claude gets the whole message plus a note that the speech hook switched the mode. The mode is remembered per session in `%APPDATA%\VoiceInput\speak_sessions.json` and kept for 30 days after the last switch. The mode of chats without a command is set by `claude_voice_default`.
+
+The hook only records a job and hands control back to Claude right away, in about 0.4 s. Summarizing and speaking run in a separate background process. The summary runs without hooks and without saving a session, so it doesn't trigger more speech and doesn't end up in your history. Each spoken reply costs one short Haiku request from your usage limit.
+
+Commands are caught by the `UserPromptSubmit` hook, and it fires on every message you send in every chat. So a short bash script, `tools/claude_speak_prompt.sh`, checks the message first, and Python starts only if the text contains «озвуч» or «молч». An ordinary message goes out with a delay of about 0.15 s: that's the startup time of bash, which Claude Code on Windows uses to run any hook.
+
+The hooks are set up in `~/.claude/settings.json` (substitute your own project path):
 
 ```json
 {
   "hooks": {
     "Stop": [
-      {"hooks": [{"type": "command", "command": "\"C:/путь/к/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook stop", "timeout": 30}]}
+      {"hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook stop", "timeout": 30}]}
     ],
     "Notification": [
       {"matcher": "permission_prompt|elicitation_dialog",
-       "hooks": [{"type": "command", "command": "\"C:/путь/к/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook notify", "timeout": 30}]}
+       "hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook notify", "timeout": 30}]}
     ],
     "PreToolUse": [
       {"matcher": "AskUserQuestion",
-       "hooks": [{"type": "command", "command": "\"C:/путь/к/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook ask", "timeout": 30}]}
+       "hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook ask", "timeout": 30}]}
+    ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": ". \"C:/path/to/voice/tools/claude_speak_prompt.sh\"", "timeout": 30}]}
     ]
   }
 }
 ```
 
-Голос по умолчанию — `terra` из [голосов сообщества](https://huggingface.co/rraaww/ru_piper): среди проверенных он оказался самым разборчивым. Официальные русские голоса Piper: `ru_RU-dmitri-medium`, `ru_RU-denis-medium`, `ru_RU-ruslan-medium`, `ru_RU-irina-medium`. Голос весит около 60 МБ и скачивается при первой фразе, в закреплённой версии. Английские слова русский голос читает невнятно, поэтому перед синтезом они переписываются кириллицей: README — «ридми», git — «гит».
+The default voice is `terra` from the [community voices](https://huggingface.co/rraaww/ru_piper): it turned out to be the clearest of the ones tested. The official Russian Piper voices are `ru_RU-dmitri-medium`, `ru_RU-denis-medium`, `ru_RU-ruslan-medium` and `ru_RU-irina-medium`. A voice weighs about 60 MB and is downloaded, at a pinned version, with the first phrase. A Russian voice mumbles English words, so they are rewritten in Cyrillic before synthesis: README becomes «ридми», git becomes «гит».
 
-Лог озвучки пишется в `%APPDATA%\VoiceInput\claude_speak.log` и хранится столько же, сколько основной (`log_minutes`).
+The speech log is written to `%APPDATA%\VoiceInput\claude_speak.log` and kept as long as the main one (`log_minutes`).
 
-## Тесты
+## Tests
 
 ```bash
 .venv\Scripts\python.exe -m pytest -m "not model"
@@ -163,41 +181,41 @@ uv sync
 .venv\Scripts\python.exe -m pytest
 ```
 
-Первая команда запускает быстрые тесты (текст, жест мыши, вставка, лог, выбор микрофона, что скажет озвучка), это меньше секунды. Вторая добавляет тесты движка на настоящей модели: синтезированная речь из `tests/audio` подаётся прямо в очередь, микрофон не открывается. Это около минуты, с пониженным приоритетом. Ни один тест не трогает клавиатуру, мышь, фокус и буфер обмена.
+The first command runs the fast tests (text, mouse gesture, pasting, log, microphone choice, what the speech will say) in under a second. The second adds engine tests on the real model: synthesized speech from `tests/audio` is fed straight into the queue, and the microphone is never opened. That takes about a minute, at lowered priority. No test touches the keyboard, the mouse, focus or the clipboard.
 
-## Как устроено
+## How it works
 
-- `hotkey.py`: low-level хук клавиатуры. Ловит двойной `\`, а во время записи ещё Esc и Enter.
-- `mousehook.py`: low-level хук мыши для жеста «левый → правый → левый». Ставится после загрузки модели, чтобы при старте курсор не подтормаживал.
-- `engine.py`: микрофон (16 кГц) → Silero VAD режет речь на фразы по паузам → GigaAM‑v3 e2e (с пунктуацией) распознаёт. Абзац (до ~14 с) перераспознаётся целиком после каждой фразы, поэтому пунктуация на стыках фраз получается правильной. Конец фразы (до 5 с) распознаётся ещё и отдельно: в тексте абзаца модель иногда теряет короткое слово после паузы — «стоп» или «энтер».
-- `ui.py`: «остров» записи и редактор; `themes.py`: цвета и эффекты стилей.
-- `inserter.py`: возвращает фокус в исходное окно и вставляет текст.
-- `textutils.py`: команды в тексте, словарь замен, чистка паразитов; `logfile.py`: лог, который помнит только последние минуты.
-- `claude_hook.py`: озвучка Claude Code; `hub.py`: скачивание моделей и голосов в закреплённой версии.
+- `hotkey.py`: a low-level keyboard hook. Catches the double `\`, and during recording also Esc and Enter.
+- `mousehook.py`: a low-level mouse hook for the "left → right → left" gesture. It is installed after the model loads, so that the cursor doesn't stutter at startup.
+- `engine.py`: microphone (16 kHz) → Silero VAD cuts speech into phrases at pauses → GigaAM‑v3 e2e (with punctuation) recognizes them. The paragraph (up to ~14 s) is re-recognized in full after each phrase, so punctuation where phrases meet comes out right. The end of the phrase (up to 5 s) is also recognized on its own: in the paragraph text the model sometimes loses a short word after a pause, such as «стоп» or «энтер».
+- `ui.py`: the recording island and the editor; `themes.py`: style colors and effects.
+- `inserter.py`: returns focus to the original window and pastes the text.
+- `textutils.py`: commands in the text, the replacement dictionary, filler cleanup; `logfile.py`: a log that remembers only the last few minutes.
+- `claude_hook.py`: Claude Code speech; `hub.py`: downloads models and voices at pinned versions.
 
-## Ограничения
+## Limitations
 
-- Окна, запущенные от администратора (например, Диспетчер задач), Windows закрывает от обычных программ: двойной `\` и жест мышью в них не срабатывают, и вставить текст туда тоже нельзя. Для них приложение нужно запускать от администратора.
-- «отмена» во время записи срабатывает, только если сказать её отдельной фразой (с паузой до и после). «Нажми кнопку отмена» запись не отменит.
-- «стоп» срабатывает, только если это последнее слово перед паузой и после него секунду тишины. Фраза «нажми кнопку стоп» с долгой паузой после неё тоже завершит запись; лишнее можно поправить в редакторе.
-- С «отправить» и «энтер» во время записи то же самое, только редактора уже не будет: «…не забудь отправить» и секунда молчания отправят текст. Если в конце фразы нужно само слово «отправить», продолжи говорить или скажи «стоп» и поправь текст в редакторе.
-- Чтобы напечатать `\\` подряд, нажимай `\` с паузой больше 0,35 с.
+- Windows shields windows running as administrator (Task Manager, for example) from ordinary programs: the double `\` and the mouse gesture don't work in them, and text can't be pasted there either. For those, run the app as administrator.
+- «отмена» during recording works only as a separate phrase, with a pause before and after. «Нажми кнопку отмена» ("press the cancel button") won't cancel the recording.
+- «стоп» works only if it's the last word before a pause and a second of silence follows. The phrase «нажми кнопку стоп» ("press the stop button") with a long pause after it will finish the recording too; the extra words can be fixed in the editor.
+- The same goes for «отправить» and «энтер» during recording, except there's no editor afterwards: «…не забудь отправить» ("…don't forget to send") and a second of silence will send the text. If you need the word «отправить» itself at the end of a phrase, keep talking, or say «стоп» and fix the text in the editor.
+- To type `\\`, press `\` twice with a pause longer than 0.35 s.
 
-## Лицензия
+## License
 
-Код проекта распространяется под лицензией [MIT](LICENSE).
+The project code is licensed under [MIT](LICENSE).
 
-Модели и библиотеки скачиваются отдельно и идут под своими лицензиями:
+Models and libraries are downloaded separately and come under their own licenses:
 
-| Компонент | Лицензия |
+| Component | License |
 |---|---|
-| [GigaAM‑v3](https://github.com/salute-developers/GigaAM) (SberDevices) и её [ONNX-версия](https://huggingface.co/istupakov/gigaam-v3-onnx) | MIT |
-| [Silero VAD](https://github.com/snakers4/silero-vad) и её [ONNX-версия](https://huggingface.co/istupakov/silero-vad-onnx) | MIT |
+| [GigaAM‑v3](https://github.com/salute-developers/GigaAM) (SberDevices) and its [ONNX version](https://huggingface.co/istupakov/gigaam-v3-onnx) | MIT |
+| [Silero VAD](https://github.com/snakers4/silero-vad) and its [ONNX version](https://huggingface.co/istupakov/silero-vad-onnx) | MIT |
 | [onnx-asr](https://github.com/istupakov/onnx-asr), ONNX Runtime, sounddevice | MIT |
 | huggingface_hub | Apache-2.0 |
 | NumPy | BSD-3-Clause |
 | PySide6 (Qt for Python) | LGPL-3.0 |
-| [piper-tts](https://github.com/OHF-Voice/piper1-gpl), только для озвучки Claude Code | GPL-3.0 |
-| Голос terra ([rraaww/ru_piper](https://huggingface.co/rraaww/ru_piper)) | Apache-2.0, источник записей не указан |
+| [piper-tts](https://github.com/OHF-Voice/piper1-gpl), only for Claude Code speech | GPL-3.0 |
+| The terra voice ([rraaww/ru_piper](https://huggingface.co/rraaww/ru_piper)) | Apache-2.0, source of the recordings not stated |
 
-У официальных голосов Piper свои лицензии на записи: dmitri и denis — CC0, ruslan — CC BY-NC-SA 4.0 (только некоммерческое использование), у irina не указана.
+The official Piper voices have their own licenses for the recordings: dmitri and denis are CC0, ruslan is CC BY-NC-SA 4.0 (non-commercial use only), and irina has none stated.

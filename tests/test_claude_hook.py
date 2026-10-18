@@ -1,6 +1,10 @@
 """Озвучка Claude: что хук решает сказать. Без Haiku, без звука и без фоновых процессов."""
 
 import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -130,3 +134,100 @@ def test_mic_open_flag():
 def test_latin_spoken_in_cyrillic():
     assert ch.to_cyrillic("Голос terra, README и git push готовы") == "Голос терра, ридми и гит пуш готовы"
     assert ch.to_cyrillic("Shell check") == "шелл чек"
+
+
+@pytest.mark.parametrize(
+    ("prompt", "mode", "rest"),
+    [
+        ("Озвучивай.", "all", ""),
+        ("озвучивай всё", "all", ""),
+        ("Озвучивай вопросы", "questions", ""),
+        ("Озвучивай только вопросы.", "questions", ""),
+        ("Не озвучивай", "off", ""),
+        ("Молчи!", "off", ""),
+        ("Озвучивай. Почини тесты в engine.py", "all", "Почини тесты в engine.py"),
+        ("Почини тесты, а потом озвучивай", None, "Почини тесты, а потом озвучивай"),
+        ("Озвучиваемые фразы слишком длинные", None, "Озвучиваемые фразы слишком длинные"),
+        ("Молчит микрофон", None, "Молчит микрофон"),
+    ],
+)
+def test_parse_voice_command(prompt, mode, rest):
+    assert ch.parse_voice_command(prompt) == (mode, rest)
+
+
+@pytest.fixture
+def sessions(tmp_path, monkeypatch):
+    monkeypatch.setattr(ch, "SESSIONS_PATH", tmp_path / "sessions.json")
+    monkeypatch.setattr(ch, "APP_DIR", tmp_path)
+    spoken = []
+    monkeypatch.setattr(ch, "enqueue", lambda job: spoken.append(job and job["text"]))
+    return spoken
+
+
+def test_session_modes(sessions):
+    assert ch.session_mode("a", "off") == "off" and ch.session_mode("a", "questions") == "questions"
+    ch.set_session_mode("a", "all")
+    ch.set_session_mode("b", "questions")
+    assert ch.session_mode("a", "off") == "all" and ch.session_mode("b", "off") == "questions"
+    assert ch.session_mode(None, "bogus") == "off"
+
+
+def test_prompt_command_only_is_blocked(sessions, capsys):
+    ch.handle_prompt({"session_id": "s1", "prompt": "Озвучивай вопросы."})
+    out = json.loads(capsys.readouterr().out)
+    assert out["decision"] == "block" and "только вопросы" in out["reason"]
+    assert ch.session_mode("s1", "off") == "questions" and sessions == ["Буду озвучивать только вопросы."]
+
+
+def test_prompt_with_task_goes_through(sessions, capsys):
+    ch.handle_prompt({"session_id": "s1", "prompt": "Молчи. И почини тесты"})
+    out = capsys.readouterr().out
+    assert out.isascii()
+    data = json.loads(out)
+    assert "decision" not in data and "выключена" in data["hookSpecificOutput"]["additionalContext"]
+    assert ch.session_mode("s1", "all") == "off"
+
+
+def test_ordinary_prompt_untouched(sessions, capsys):
+    ch.handle_prompt({"session_id": "s1", "prompt": "Почини тесты"})
+    assert capsys.readouterr().out == "" and sessions == [] and ch.session_mode("s1", "x") == "off"
+
+
+def test_modes_filter_jobs():
+    done = {"last_assistant_message": "Всё сделал, тесты прошли."}
+    asking = {"last_assistant_message": "Сделал половину. Пушить в main?"}
+    ask = {"tool_input": {"questions": [{"question": "Какой голос?"}]}}
+    perm = {"notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"}
+    assert all(ch.make_job(e, d, "off") is None for e, d in (("stop", done), ("ask", ask), ("notify", perm)))
+    assert ch.make_job("stop", done, "questions") is None
+    job = ch.make_job("stop", asking, "questions")
+    assert job["kind"] == "question" and job["questions_only"]
+    assert ch.make_job("ask", ask, "questions") and ch.make_job("notify", perm, "questions")
+    assert ch.make_job("stop", done, "all")["kind"] == "done"
+
+
+def _git_bash():
+    git = shutil.which("git")
+    for parent in Path(git).resolve().parents if git else []:
+        if (parent / "bin" / "bash.exe").exists():
+            return parent / "bin" / "bash.exe"
+    return None
+
+
+@pytest.mark.skipif(_git_bash() is None, reason="нужен Git Bash: так Claude Code запускает хуки на Windows")
+@pytest.mark.parametrize("prompt, called", [
+    ("Почини тесты", False),
+    ("Озвучивай вопросы", True),
+    ("и молчи", True),
+    (r"Озвучивай", True),  # кириллица, экранированная в JSON
+    (r"молчи", True),
+])
+def test_prompt_prefilter(tmp_path, prompt, called):
+    """Шелл-фильтр зовёт Python только для сообщений со словами команд."""
+    script = (Path(__file__).parents[1] / "tools" / "claude_speak_prompt.sh").read_text(encoding="utf-8")
+    script = re.sub(r"printf .*? prompt ;;", "echo CALLED ;;", script)
+    (tmp_path / "f.sh").write_text(script, encoding="utf-8", newline="\n")
+    payload = '{"session_id":"s","prompt":"%s"}' % prompt
+    r = subprocess.run([str(_git_bash()), "-c", ". ./f.sh"], cwd=tmp_path, input=payload.encode("utf-8"),
+                       capture_output=True, timeout=20)
+    assert r.returncode == 0 and (b"CALLED" in r.stdout) == called

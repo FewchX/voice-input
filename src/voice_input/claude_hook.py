@@ -75,23 +75,114 @@ def main(argv: list[str] | None = None) -> None:
         return
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
-        job = make_job(argv[0] if argv else "stop", data)
-        if job is None:
+        event = argv[0] if argv else "stop"
+        if event == "prompt":
+            handle_prompt(data)
             return
-        JOBS_DIR.mkdir(parents=True, exist_ok=True)
-        path = JOBS_DIR / f"{time.time_ns()}.json"
-        path.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
-        _spawn_worker(path)
+        mode = session_mode(data.get("session_id"), Config.read().claude_voice_default)
+        enqueue(make_job(event, data, mode))
     except Exception:
         _setup_log(Config.read())
         log.exception("хук озвучки упал")
 
 
-def make_job(event: str, data: dict) -> dict | None:
+def enqueue(job: dict | None) -> None:
+    if job is None:
+        return
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    path = JOBS_DIR / f"{time.time_ns()}.json"
+    path.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
+    _spawn_worker(path)
+
+
+# --------------------------------------------------------------------------- режим озвучки чата
+
+# Когда одновременно открыто пять чатов, говорить должны не все: режим задаётся словом в начале
+# сообщения и запоминается для этой сессии Claude. off — молчать; questions — только когда нужен
+# пользователь (вопрос, разрешение); all — ещё и «Готово: …» в конце каждого хода.
+MODES = ("off", "questions", "all")
+SESSIONS_PATH = APP_DIR / "speak_sessions.json"
+SESSION_TTL_S = 30 * 24 * 3600
+VOICE_COMMANDS = [  # порядок важен: «не озвучивай» раньше «озвучивай», «озвучивай вопросы» раньше «озвучивай»
+    (re.compile(r"(не\s+озвучивай|молчи)(\s+вс[её])?(?!\w)", re.IGNORECASE), "off"),
+    (re.compile(r"озвучивай\s+(только\s+)?вопросы(?!\w)", re.IGNORECASE), "questions"),
+    (re.compile(r"озвучивай(\s+вс[её])?(?!\w)", re.IGNORECASE), "all"),
+]
+MODE_NAMES = {"off": "выключена", "questions": "только вопросы", "all": "всё"}
+CONFIRM = {"off": "Озвучка выключена.", "questions": "Буду озвучивать только вопросы.", "all": "Буду озвучивать всё."}
+
+
+def parse_voice_command(prompt: str) -> tuple[str | None, str]:
+    """(режим, остальной текст); режим None — в начале сообщения нет команды озвучки."""
+    text = prompt.strip().lstrip("«\"'")
+    for rx, mode in VOICE_COMMANDS:
+        m = rx.match(text)
+        if m:
+            return mode, text[m.end() :].strip(" \t\r\n.,!?:;—-»\"'")
+    return None, prompt
+
+
+def _load_sessions() -> dict:
+    try:
+        return json.loads(SESSIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def session_mode(session_id: str | None, default: str) -> str:
+    entry = _load_sessions().get(session_id or "")
+    mode = entry.get("mode") if isinstance(entry, dict) else None
+    return mode if mode in MODES else (default if default in MODES else "off")
+
+
+def set_session_mode(session_id: str, mode: str) -> None:
+    now = time.time()
+    sessions = {k: v for k, v in _load_sessions().items() if isinstance(v, dict) and now - v.get("at", 0) < SESSION_TTL_S}
+    sessions[session_id] = {"mode": mode, "at": now}
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = SESSIONS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sessions, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, SESSIONS_PATH)
+
+
+def handle_prompt(data: dict) -> None:
+    """Хук UserPromptSubmit: «озвучивай», «озвучивай вопросы», «не озвучивай» / «молчи» в начале сообщения."""
+    mode, rest = parse_voice_command(data.get("prompt") or "")
+    if mode is None or not data.get("session_id"):
+        return
+    set_session_mode(data["session_id"], mode)
+    enqueue({"created": time.time(), "kind": "say", "text": CONFIRM[mode]})
+    note = f"Озвучка этого чата: {MODE_NAMES[mode]}."
+    if not rest:
+        # Сообщение — одна команда: Claude его не получает, ход не тратится.
+        out = {"decision": "block", "reason": note}
+    else:
+        out = {"hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": f"{note} Это переключил хук озвучки по первым словам сообщения — отвечать на это не нужно.",
+        }}
+    # Только ASCII (кириллица как \uXXXX): stdout в канале пишется в кодировке системы, а Claude читает UTF-8.
+    print(json.dumps(out))
+
+
+def looks_like_question(text: str, notes: str) -> bool:
+    """Заканчивается ли ход вопросом к пользователю — чтобы в режиме «только вопросы» не звать Haiku зря."""
+    return "Вопрос пользователю:" in notes or "?" in text[-400:]
+
+
+def make_job(event: str, data: dict, mode: str = "all") -> dict | None:
     """Что сказать: {"kind": "done" | "question" | "say", ...}; None — промолчать."""
+    if mode == "off":
+        return None
     job: dict = {"created": time.time()}
     if event == "stop":
-        job.update(kind="done", text=data.get("last_assistant_message") or "", notes=turn_notes(data.get("transcript_path")))
+        text, notes = data.get("last_assistant_message") or "", turn_notes(data.get("transcript_path"))
+        if mode == "questions":
+            if not looks_like_question(text, notes):
+                return None
+            job.update(kind="question", text=text, notes=notes, questions_only=True)
+        else:
+            job.update(kind="done", text=text, notes=notes)
     elif event == "ask":
         questions = (data.get("tool_input") or {}).get("questions") or [{}]
         job.update(kind="question", text=questions[0].get("question") or "", notes="")
@@ -206,6 +297,9 @@ def _speak_job(job: dict, cfg: Config) -> None:
     loader.join()
     if not phrase or "v" not in voice:
         return
+    if job.get("questions_only") and not phrase.startswith(("Вопрос", "У меня вопрос")):
+        log.info("режим «только вопросы», а это не вопрос — молчу: %s", phrase)
+        return
     audio, sr = synthesize(voice["v"], phrase, cfg.claude_voice_speed)
 
     queue = win32.create_mutex(QUEUE_MUTEX)
@@ -238,7 +332,12 @@ def phrase_for(job: dict, use_summary: bool) -> str:
         return f"Вопрос: {clean_for_speech(text)}" if text else fallback
     if not use_summary or not text.strip():
         return fallback
-    what = "Ассистент задал пользователю вопрос с вариантами ответа." if job["kind"] == "question" else "Ассистент закончил свой ход."
+    if job.get("questions_only"):
+        what = "Ассистент закончил ход; возможно, в конце он спрашивает о чём-то пользователя."
+    elif job["kind"] == "question":
+        what = "Ассистент задал пользователю вопрос с вариантами ответа."
+    else:
+        what = "Ассистент закончил свой ход."
     return summarize(PROMPT.format(what=what, text=_trim(text))) or fallback
 
 

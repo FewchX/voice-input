@@ -108,6 +108,9 @@ class Config:
     claude_voice: str | None = "rraaww/ru_piper/ru_RU-terra5871-medium"
     claude_voice_speed: float = 0.9
     claude_voice_summary: bool = True
+    # Что озвучивать в чатах, где режим не задан словом («озвучивай», «озвучивай вопросы», «молчи»):
+    # off — ничего, questions — только вопросы и разрешения, all — ещё и «Готово: …».
+    claude_voice_default: str = "off"
 
     @classmethod
     def load(cls) -> Config:
