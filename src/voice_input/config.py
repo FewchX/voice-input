@@ -102,15 +102,6 @@ class Config:
     # Цвет свечения для стилей с подсветкой: white | orange | blue | purple | pink | green | rainbow
     # или «#RRGGBB»; null — как задумано в стиле.
     glow: str | None = None
-    # Озвучка Claude Code (хуки → claude_hook.py): голос Piper — официальный («ru_RU-dmitri-medium»)
-    # или «владелец/репозиторий/имя» с Hugging Face — либо null, чтобы молчать;
-    # скорость речи (1.0 — как обучен голос); пересказывать ли ответ моделью Haiku через `claude -p`.
-    claude_voice: str | None = "rraaww/ru_piper/ru_RU-terra5871-medium"
-    claude_voice_speed: float = 0.9
-    claude_voice_summary: bool = True
-    # Что озвучивать в чатах, где режим не задан словом («озвучивай», «озвучивай вопросы», «молчи»):
-    # off — ничего, questions — только вопросы и разрешения, all — ещё и «Готово: …».
-    claude_voice_default: str = "off"
 
     @classmethod
     def load(cls) -> Config:
@@ -120,7 +111,7 @@ class Config:
 
     @classmethod
     def read(cls) -> Config:
-        """Настройки без записи файла — для других процессов (озвучка Claude), пока приложение работает."""
+        """Настройки без записи файла."""
         cfg = cls()
         if CONFIG_PATH.exists():
             try:

@@ -111,65 +111,9 @@ On first launch the models (~850 MB) are downloaded from Hugging Face into `%USE
 - `keep_in_clipboard`: `true` (default): the text stays in the clipboard after pasting; `false`: whatever was there before is put back;
 - `theme`: window style (`island`, `siri`, `dark_glass`, `glass`, `light`), easier to switch from the tray;
 - `glow`: glow color (`white`, `orange`, `blue`, `purple`, `pink`, `green`, `rainbow` or `#RRGGBB`); `null` means the style's own;
-- `claude_voice`: the voice for Claude Code speech (see below): an official Piper voice (`ru_RU-dmitri-medium`) or `owner/repository/name` on Hugging Face; `null` means silent;
-- `claude_voice_speed`: speech rate; `1.0` is how the voice was trained (default `0.9`, a little slower);
-- `claude_voice_summary`: `true`: summarize the reply with Haiku; `false`: just say «Готово.» ("Done.");
-- `claude_voice_default`: what to speak in chats that had no command: `off` (default): nothing, `questions`: questions only, `all`: everything;
 - `log_minutes`: how many minutes of log to keep (default 5; `0` means never clean up).
 
 The log is written to `%APPDATA%\VoiceInput\voice.log`. It contains dictated text and window titles, so entries older than `log_minutes` minutes are deleted from it.
-
-## Claude Code speech
-
-An optional extra: when Claude Code finishes a turn or is waiting for you, it briefly says out loud what it did or what it wants to ask, in the chats where you turned speech on. For example: «Готово: обновил ридми, все тесты прошли» ("Done: updated the README, all tests passed") or «Вопрос: закоммитить и запушить изменения?» ("Question: commit and push the changes?"). Speech is synthesized locally with [Piper](https://github.com/OHF-Voice/piper1-gpl).
-
-- **Claude finished a turn** (`Stop` hook): the Haiku model summarizes the last reply through `claude -p` into one phrase of up to 12 words. It plays 5–8 seconds after the reply. If `claude` isn't installed or the summary fails, it just says «Готово.».
-- **Permission needed** (`Notification` hook): «Нужно разрешение на запуск команды» ("Permission needed to run a command").
-- **Multiple-choice question** (`PreToolUse` hook on `AskUserQuestion`): the question itself.
-- **While the voice-input microphone is open** (you're dictating or the editor is open), speech waits and plays afterwards. If you start dictating mid-phrase, it stops. A phrase that has waited longer than 3 minutes is skipped. Phrases from several sessions play one after another.
-
-### Which chats speak
-
-By default all chats are silent: with several sessions open at once, voices from all of them would get in each other's way. Speech is turned on for a single chat with a word at the start of a message:
-
-| Message starts with | What this chat speaks |
-|---|---|
-| «озвучивай» or «озвучивай всё» ("speak", "speak everything") | everything: the end of every turn, permission requests and questions |
-| «озвучивай вопросы» or «озвучивай только вопросы» ("speak questions", "speak only questions") | questions only: permission requests, multiple-choice questions, and the end of a turn if it ends with a question |
-| «не озвучивай» or «молчи» ("don't speak", "be quiet") | nothing |
-
-If the message is nothing but the command, it isn't sent to Claude and doesn't use up a turn; the voice confirms instead: «Буду озвучивать только вопросы.» ("I'll speak only questions."). If a task follows the command («Озвучивай вопросы. Почини тесты», "Speak questions. Fix the tests"), Claude gets the whole message plus a note that the speech hook switched the mode. The mode is remembered per session in `%APPDATA%\VoiceInput\speak_sessions.json` and kept for 30 days after the last switch. The mode of chats without a command is set by `claude_voice_default`.
-
-The hook only records a job and hands control back to Claude right away, in about 0.4 s. Summarizing and speaking run in a separate background process. The summary runs without hooks and without saving a session, so it doesn't trigger more speech and doesn't end up in your history. Each spoken reply costs one short Haiku request from your usage limit.
-
-Commands are caught by the `UserPromptSubmit` hook, and it fires on every message you send in every chat. So a short bash script, `tools/claude_speak_prompt.sh`, checks the message first, and Python starts only if the text contains «озвуч» or «молч». An ordinary message goes out with a delay of about 0.15 s: that's the startup time of bash, which Claude Code on Windows uses to run any hook.
-
-The hooks are set up in `~/.claude/settings.json` (substitute your own project path):
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {"hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook stop", "timeout": 30}]}
-    ],
-    "Notification": [
-      {"matcher": "permission_prompt|elicitation_dialog",
-       "hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook notify", "timeout": 30}]}
-    ],
-    "PreToolUse": [
-      {"matcher": "AskUserQuestion",
-       "hooks": [{"type": "command", "command": "\"C:/path/to/voice/.venv/Scripts/python.exe\" -m voice_input.claude_hook ask", "timeout": 30}]}
-    ],
-    "UserPromptSubmit": [
-      {"hooks": [{"type": "command", "command": ". \"C:/path/to/voice/tools/claude_speak_prompt.sh\"", "timeout": 30}]}
-    ]
-  }
-}
-```
-
-The default voice is `terra` from the [community voices](https://huggingface.co/rraaww/ru_piper): it turned out to be the clearest of the ones tested. The official Russian Piper voices are `ru_RU-dmitri-medium`, `ru_RU-denis-medium`, `ru_RU-ruslan-medium` and `ru_RU-irina-medium`. A voice weighs about 60 MB and is downloaded, at a pinned version, with the first phrase. A Russian voice mumbles English words, so they are rewritten in Cyrillic before synthesis: README becomes «ридми», git becomes «гит».
-
-The speech log is written to `%APPDATA%\VoiceInput\claude_speak.log` and kept as long as the main one (`log_minutes`).
 
 ## Tests
 
@@ -181,7 +125,7 @@ The speech log is written to `%APPDATA%\VoiceInput\claude_speak.log` and kept as
 .venv\Scripts\python.exe -m pytest
 ```
 
-The first command runs the fast tests (text, mouse gesture, pasting, log, microphone choice, what the speech will say) in under a second. The second adds engine tests on the real model: synthesized speech from `tests/audio` is fed straight into the queue, and the microphone is never opened. That takes about a minute, at lowered priority. No test touches the keyboard, the mouse, focus or the clipboard.
+The first command runs the fast tests (text, mouse gesture, pasting, log, microphone choice) in under a second. The second adds engine tests on the real model: synthesized speech from `tests/audio` is fed straight into the queue, and the microphone is never opened. That takes about a minute, at lowered priority. No test touches the keyboard, the mouse, focus or the clipboard.
 
 ## How it works
 
@@ -191,7 +135,7 @@ The first command runs the fast tests (text, mouse gesture, pasting, log, microp
 - `ui.py`: the recording island and the editor; `themes.py`: style colors and effects.
 - `inserter.py`: returns focus to the original window and pastes the text.
 - `textutils.py`: commands in the text, the replacement dictionary, filler cleanup; `logfile.py`: a log that remembers only the last few minutes.
-- `claude_hook.py`: Claude Code speech; `hub.py`: downloads models and voices at pinned versions.
+- `hub.py`: downloads models at pinned versions.
 
 ## Limitations
 
@@ -215,7 +159,4 @@ Models and libraries are downloaded separately and come under their own licenses
 | huggingface_hub | Apache-2.0 |
 | NumPy | BSD-3-Clause |
 | PySide6 (Qt for Python) | LGPL-3.0 |
-| [piper-tts](https://github.com/OHF-Voice/piper1-gpl), only for Claude Code speech | GPL-3.0 |
-| The terra voice ([rraaww/ru_piper](https://huggingface.co/rraaww/ru_piper)) | Apache-2.0, source of the recordings not stated |
 
-The official Piper voices have their own licenses for the recordings: dmitri and denis are CC0, ruslan is CC BY-NC-SA 4.0 (non-commercial use only), and irina has none stated.

@@ -1,2 +1,0 @@
-# bash не понимает CRLF: скрипты хуков должны оставаться с LF и при core.autocrlf=true
-*.sh text eol=lf
