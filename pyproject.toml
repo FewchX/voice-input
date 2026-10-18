@@ -1,7 +1,7 @@
 [project]
 name = "voice-input"
 version = "0.1.0"
-description = "Голосовой ввод на русском с локальным распознаванием (GigaAM-v3)"
+description = "Russian and English voice input for Windows with local speech recognition (GigaAM-v3, Parakeet)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

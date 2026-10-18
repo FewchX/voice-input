@@ -98,3 +98,52 @@ def test_replacements(raw, clean):
 def test_clean_combines_both():
     assert t.clean("Э-э, закинь это в гид.", DEFAULT_REPLACEMENTS) == "Закинь это в git."
     assert t.clean("Э-э, закинь это в гид.", {}, fillers=False) == "Э-э, закинь это в гид."
+
+
+# --------------------------------------------------------------------------- английский
+
+en = Config().lang("en")
+
+
+@pytest.mark.parametrize(
+    "text, words, expected",
+    [
+        ("Please merge it today. Send.", "send_words", True),
+        ("Let me know when you are ready. Enter.", "send_words", True),
+        ("Ready. Inter.", "send_words", True),  # «~enter» узнаётся и с одной ошибкой
+        ("I will send you the file tomorrow.", "send_words", False),
+        ("Okay.", "ok_words", True),
+        ("We are done.", "ok_words", True),
+    ],
+)
+def test_english_commands(text, words, expected):
+    assert t.ends_with(text, getattr(en, words)) is expected
+
+
+def test_english_stop_and_cancel():
+    assert t.strip_trailing_word("Hello, this is a test. Stop.", en.stop_words) == ("Hello, this is a test.", True)
+    assert t.is_command("Cancel.", en.cancel_words)
+    assert not t.is_command("Cancel the meeting.", en.cancel_words)
+
+
+@pytest.mark.parametrize(
+    "raw, clean",
+    [
+        ("Um, I think, uh, we should ship it.", "I think, we should ship it."),
+        ("Hmm. Let me check.", "Let me check."),
+        ("It is 5 mm wide.", "It is 5 mm wide."),
+        ("The umbrella and the hummingbird.", "The umbrella and the hummingbird."),
+    ],
+)
+def test_english_fillers(raw, clean):
+    assert t.clean(raw, {}, language="en") == clean
+
+
+def test_russian_fillers_untouched_in_english():
+    assert t.remove_fillers("Э-э, hello", "en") == "Э-э, hello"
+
+
+def test_display_word():
+    assert t.display_word(cfg.stop_words) == "стоп"
+    assert t.display_word(en.send_words) == "send"
+    assert t.display_word(["~энтер"]) == "энтер"

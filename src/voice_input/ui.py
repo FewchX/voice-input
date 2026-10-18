@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import win32
+from . import textutils, win32
 from .themes import THEMES, Backdrop, Theme, alpha, css, get_theme, paint_card, siri_color, siri_gradient
 
 TEXT_FONT = "Segoe UI Variable Text"
@@ -420,7 +420,9 @@ class Island(QWidget):
         if self._armed:
             hint = "Продолжите говорить, чтобы не останавливаться   ·   Esc — отмена"
         else:
-            hint = "«стоп» — в редактор   ·   «отправить» — сразу   ·   Esc — отмена"
+            lang = self.engine.lang
+            stop, send = textutils.display_word(lang.stop_words), textutils.display_word(lang.send_words)
+            hint = f"«{stop}» — в редактор   ·   «{send}» — сразу   ·   Esc — отмена"
         p.drawText(
             QRectF(x0 + self.PAD, card.bottom() - self.hint_fm.height() - 12, self.WIDTH - 2 * self.PAD, 20),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
@@ -521,13 +523,19 @@ class _ListeningBadge(QWidget):
         self.listening = True
         self.theme = get_theme(None)
         self._f = font(8.8, QFont.Weight.DemiBold)
-        self._text = "Скажите «ок» или «отправить»"
-        fm = QFontMetrics(self._f)
-        self.setFixedSize(fm.horizontalAdvance(self._text) + 26, 22)
+        self._fit_text()
         self._timer = QTimer(self, interval=33)
         self._timer.timeout.connect(self.update)
 
+    def _fit_text(self) -> None:
+        """Подсказка словами текущего языка распознавания."""
+        lang = self.engine.lang
+        ok, send = textutils.display_word(lang.ok_words), textutils.display_word(lang.send_words)
+        self._text = f"Скажите «{ok}» или «{send}»"
+        self.setFixedSize(QFontMetrics(self._f).horizontalAdvance(self._text) + 26, 22)
+
     def showEvent(self, e) -> None:
+        self._fit_text()
         self._timer.start()
 
     def hideEvent(self, e) -> None:

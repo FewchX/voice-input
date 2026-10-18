@@ -88,16 +88,18 @@ def is_command(text: str, words: list[str]) -> bool:
 
 # «а-а», «э-э-э», «м-м», «ммм», «эм» — паразиты. Одиночные «а», «э» не трогаем: «а» — обычный союз.
 _FILLER = re.compile(r"(?<![\w-])(?:([аэм])(?:-?\1)+|эм+)(?![\w-])[,.!?…]*\s*", re.IGNORECASE)
+# um, umm, uh, uhm, erm, hmm, mmm. «mm» не трогаем: это ещё и миллиметры.
+_FILLER_EN = re.compile(r"(?<![\w-])(?:u+h+m*|u+m+|e+r+m+|h+m+|m{3,})(?![\w-])[,.!?…]*\s*", re.IGNORECASE)
 _CAP = "\x00"  # метка: следующее слово начинает предложение
 
 
-def remove_fillers(text: str) -> str:
-    """«А-а я бы хотел, э-э, попробовать» → «Я бы хотел, попробовать»."""
+def remove_fillers(text: str, language: str = "ru") -> str:
+    """«А-а я бы хотел, э-э, попробовать» → «Я бы хотел, попробовать»; «Um, I think, uh, yes» → «I think, yes»."""
 
     def drop(m: re.Match) -> str:
         return _CAP if m.group(0)[0].isupper() else ""
 
-    text = _FILLER.sub(drop, text)
+    text = (_FILLER_EN if language == "en" else _FILLER).sub(drop, text)
     text = re.sub(_CAP + r"\s*(\W*)(\w)", lambda m: m.group(1) + m.group(2).upper(), text).replace(_CAP, "")
     text = re.sub(r"\s+([,.!?…])", r"\1", text)  # «слово ,» → «слово,»
     text = re.sub(r",\s*([.!?…])", r"\1", text)  # «слово, .» → «слово.»
@@ -137,11 +139,16 @@ def apply_replacements(text: str, replacements: dict[str, str]) -> str:
     return text
 
 
-def clean(text: str, replacements: dict[str, str], fillers: bool = True) -> str:
+def clean(text: str, replacements: dict[str, str], fillers: bool = True, language: str = "ru") -> str:
     """Финальная чистка распознанного текста перед показом и вставкой."""
     if fillers:
-        text = remove_fillers(text)
+        text = remove_fillers(text, language)
     return apply_replacements(text, replacements) if replacements else text
+
+
+def display_word(words: list[str]) -> str:
+    """Как показать команду в подсказке: первое слово списка, без «~»."""
+    return words[0].removeprefix(FUZZY) if words else ""
 
 
 def join_text(left: str, right: str) -> str:

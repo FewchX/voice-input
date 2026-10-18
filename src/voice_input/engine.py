@@ -1,4 +1,4 @@
-"""Микрофон → Silero VAD → GigaAM. Работает в фоновом потоке, наружу — Qt-сигналы.
+"""Микрофон → Silero VAD → GigaAM (русский) или Parakeet (английский). Работает в фоновом потоке, наружу — Qt-сигналы.
 
 Режимы:
   dictation — копим фразы, показываем текст вживую; «стоп» в конце фразы завершает диктовку,
@@ -21,7 +21,7 @@ from PySide6.QtCore import QObject, Signal
 
 from . import textutils, win32
 from .config import Config
-from .hub import pinned_snapshot
+from .hub import cached_snapshot, pinned_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -39,22 +39,36 @@ GAP = np.zeros(int(0.15 * SR), dtype=np.float32)
 # Проверенные версии моделей на Hugging Face. Без ревизии берётся последняя, и обновление у автора
 # могло бы незаметно поменять распознавание. Скачиваются при первом запуске в кэш Hugging Face.
 PINNED_MODELS = {
-    "gigaam-v3-e2e-rnnt": (
+    ("gigaam-v3-e2e-rnnt", None): (
         "istupakov/gigaam-v3-onnx",
         "322c3b29492673eb7d0b434bfa9dfb8653e34d02",
         ["config.json", "v3_e2e_rnnt_encoder.onnx", "v3_e2e_rnnt_decoder.onnx", "v3_e2e_rnnt_joint.onnx",
          "v3_e2e_rnnt_vocab.txt"],
     ),
-    "silero": ("istupakov/silero-vad-onnx", "b3e3ee3cce4c11ceb63b1a0b229d916069c1ddf6", ["config.json", "silero_vad.onnx"]),
+    ("nemo-parakeet-tdt-0.6b-v2", "int8"): (
+        "istupakov/parakeet-tdt-0.6b-v2-onnx",
+        "0bbb45a3365852604aef28b538a8f066f4ccaa85",
+        ["config.json", "encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt"],
+    ),
+    ("silero", None): (
+        "istupakov/silero-vad-onnx", "b3e3ee3cce4c11ceb63b1a0b229d916069c1ddf6", ["config.json", "silero_vad.onnx"]
+    ),
 }
 
 
-def pinned_model_path(name: str) -> str | None:
+def pinned_model_path(name: str, quantization: str | None = None) -> str | None:
     """Папка с закреплённой версией модели (скачивается, если её ещё нет). None — модель не из списка:
     её как обычно найдёт и скачает onnx-asr (последнюю версию)."""
-    if name not in PINNED_MODELS:
+    if (name, quantization) not in PINNED_MODELS:
         return None
-    return pinned_snapshot(*PINNED_MODELS[name])
+    return pinned_snapshot(*PINNED_MODELS[name, quantization])
+
+
+def model_downloaded(name: str, quantization: str | None = None) -> bool:
+    """Закреплённая модель уже в кэше (не из списка — считаем, что да: про неё мы не знаем)."""
+    if (name, quantization) not in PINNED_MODELS:
+        return True
+    return cached_snapshot(*PINNED_MODELS[name, quantization]) is not None
 
 
 def _session_options(threads: int):
@@ -219,6 +233,7 @@ class _FakeMic:
 
 class Engine(QObject):
     model_state = Signal(str)  # "loading" | "ready" | "error"
+    language_changed = Signal(str, bool)  # язык после set_language; False — его модель не загрузилась
     text_changed = Signal(str)
     dictation_done = Signal(str, bool)  # текст; True — сразу вставить и отправить
     dictation_cancelled = Signal()  # во время записи сказали «отмена»
@@ -246,6 +261,9 @@ class Engine(QObject):
         self._loaded = threading.Event()
         self._asr = None
         self._vad_session = None
+        self.lang = cfg.lang()  # язык модели, которая сейчас распознаёт
+        self._want: queue.Queue[str] = queue.Queue()  # какие языки загрузить
+        self._want.put(self.lang.code)
 
         threading.Thread(target=self._load, name="asr-load", daemon=True).start()
         threading.Thread(target=self._worker, name="asr-worker", daemon=True).start()
@@ -265,6 +283,10 @@ class Engine(QObject):
     def stop(self) -> None:
         self._switch("idle")
         self._close_mic()
+
+    def set_language(self, code: str) -> None:
+        """Сменить язык. Новая модель грузится в фоне, а до тех пор распознаёт прежняя; итог — language_changed."""
+        self._want.put(code)
 
     # ------------------------------------------------------------------ микрофон
 
@@ -369,27 +391,56 @@ class Engine(QObject):
     # ------------------------------------------------------------------ модель
 
     def _load(self) -> None:
+        """Грузит VAD, потом модель распознавания — и дальше новую модель при каждой смене языка."""
         self.model_state.emit("loading")
         try:
             import onnx_asr
 
-            t = time.monotonic()
-            asr_threads = max(1, min(8, (os.cpu_count() or 2) // 2))
             vad_path = pinned_model_path("silero")
             self._vad_session = onnx_asr.load_vad("silero", vad_path, sess_options=_session_options(1))._model
-            asr_path = pinned_model_path(self.cfg.model) if self.cfg.quantization is None else None
-            self._asr = onnx_asr.load_model(
-                self.cfg.model, asr_path, quantization=self.cfg.quantization, sess_options=_session_options(asr_threads)
-            )
-            self._asr.recognize(np.zeros(SR, dtype=np.float32), sample_rate=SR)  # прогрев
-            log.info("модель %s загружена за %.1f с", self.cfg.model, time.monotonic() - t)
         except Exception:
-            log.exception("не удалось загрузить модель")
+            log.exception("не удалось загрузить VAD")
             self.model_state.emit("error")
             return
-        self.ready = True
-        self._loaded.set()
-        self.model_state.emit("ready")
+        while True:
+            code = self._want.get()
+            while not self._want.empty():
+                code = self._want.get_nowait()  # пока грузили, язык успели сменить ещё раз — нужен последний
+            lang = self.cfg.lang(code)
+            if self.ready and lang == self.lang:
+                self.language_changed.emit(lang.code, True)
+                continue
+            try:
+                asr = self._load_asr(lang)
+            except Exception:
+                log.exception("не удалось загрузить модель %s", lang.model)
+                if self.ready:
+                    self.language_changed.emit(lang.code, False)
+                else:
+                    self.model_state.emit("error")
+                continue
+            self._asr, self.lang = asr, lang  # прежняя модель освобождается
+            if self.ready:
+                self.language_changed.emit(lang.code, True)
+            else:
+                self.ready = True
+                self._loaded.set()
+                self.model_state.emit("ready")
+
+    def _load_asr(self, lang):
+        import onnx_asr
+
+        t = time.monotonic()
+        threads = max(1, min(8, (os.cpu_count() or 2) // 2))
+        asr = onnx_asr.load_model(
+            lang.model,
+            pinned_model_path(lang.model, lang.quantization),
+            quantization=lang.quantization,
+            sess_options=_session_options(threads),
+        )
+        asr.recognize(np.zeros(SR, dtype=np.float32), sample_rate=SR)  # прогрев
+        log.info("модель %s (%s) загружена за %.1f с", lang.model, lang.code, time.monotonic() - t)
+        return asr
 
     def _recognize(self, audio: np.ndarray) -> str:
         try:
@@ -399,7 +450,7 @@ class Engine(QObject):
             return ""
 
     def _clean(self, text: str) -> str:
-        return textutils.clean(text, self.cfg.replacements, self.cfg.remove_fillers)
+        return textutils.clean(text, self.lang.replacements, self.cfg.remove_fillers, self.lang.code)
 
     # ------------------------------------------------------------------ фоновый поток
 
@@ -426,7 +477,7 @@ class Engine(QObject):
         idle = 0  # чанков без речи подряд — для автоостановки
 
         def command_words(command: str | None) -> list[str]:
-            return self.cfg.send_words if command == "send" else self.cfg.stop_words
+            return self.lang.send_words if command == "send" else self.lang.stop_words
 
         def finish(send: bool = False) -> None:
             nonlocal mode, armed
@@ -475,9 +526,9 @@ class Engine(QObject):
                         text = self._recognize(phrase[-int(COMMAND_TAIL_S * SR) :])
                         log.info("команда? %r", text)
                         for command, words in (
-                            ("send", self.cfg.send_words),
-                            ("ok", self.cfg.ok_words),
-                            ("cancel", self.cfg.cancel_words),
+                            ("send", self.lang.send_words),
+                            ("ok", self.lang.ok_words),
+                            ("cancel", self.lang.cancel_words),
                         ):
                             if textutils.ends_with(text, words):
                                 self.command.emit(command)
@@ -514,7 +565,7 @@ class Engine(QObject):
                     # («…спокойно. Энтер.») модель иногда теряет, а границ фраз в нём не видно.
                     tail = phrase[-int(COMMAND_TAIL_S * SR) :]
                     alone = pending if len(phrases) == 1 and len(tail) == len(phrase) else self._recognize(tail)
-                    if len(phrase) <= CANCEL_MAX_S * SR and textutils.is_command(alone, self.cfg.cancel_words):
+                    if len(phrase) <= CANCEL_MAX_S * SR and textutils.is_command(alone, self.lang.cancel_words):
                         # Фраза целиком «отмена» — отменяем запись.
                         log.info("фраза: %r — отменяю запись", alone)
                         mode = "idle"
@@ -532,7 +583,7 @@ class Engine(QObject):
                     # «…стоп» — в редактор, «…отправить» / «…энтер» — сразу вставить и отправить.
                     # Выполняем не сразу, а после command_wait_ms тишины: если речь продолжится,
                     # значит, слово было частью фразы.
-                    armed = "stop" if said(self.cfg.stop_words) else "send" if said(self.cfg.send_words) else None
+                    armed = "stop" if said(self.lang.stop_words) else "send" if said(self.lang.send_words) else None
                     shown = full
                     if armed:
                         armed_quiet = 0

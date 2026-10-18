@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -46,9 +47,40 @@ DEFAULT_REPLACEMENTS = {
     "мёртж": "мёрж",
 }
 
+LANGUAGES = {"ru": "Русский", "en": "English"}
+
+# Английский: GigaAM знает только русский, поэтому у английского своя модель и свои слова-команды.
+# Parakeet TDT 0.6B v2 (NVIDIA) сам ставит пунктуацию и заглавные буквы; int8 — 660 МБ вместо 2,5 ГБ.
+ENGLISH_DEFAULTS = {
+    "model": "nemo-parakeet-tdt-0.6b-v2",
+    "quantization": "int8",
+    "stop_words": ["stop"],
+    "ok_words": ["okay", "ok", "done"],
+    "cancel_words": ["cancel"],
+    "send_words": ["send", "~enter"],
+    "replacements": {},
+}
+
+
+@dataclass
+class Language:
+    """Всё, что зависит от языка распознавания."""
+
+    code: str
+    model: str
+    quantization: str | None
+    stop_words: list[str]
+    ok_words: list[str]
+    cancel_words: list[str]
+    send_words: list[str]
+    replacements: dict[str, str]
+
 
 @dataclass
 class Config:
+    # Язык распознавания: ru | en (переключается в меню трея). Настройки русского — ключи ниже
+    # (model, stop_words, replacements…), английского — те же ключи внутри english.
+    language: str = "ru"
     # Модель распознавания (onnx-asr). e2e-версии GigaAM сами расставляют пунктуацию.
     model: str = "gigaam-v3-e2e-rnnt"
     quantization: str | None = None
@@ -85,8 +117,11 @@ class Config:
 
     # Словарь замен: как модель пишет → как нужно. Слова и фразы целиком, регистр и ё/е не важны.
     replacements: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_REPLACEMENTS))
-    # Убирать «а-а», «э-э», «м-м» и подобные.
+    # Убирать «а-а», «э-э», «м-м» и подобные (в английском — um, uh, hmm).
     remove_fillers: bool = True
+    # Английский: model, quantization, stop_words, ok_words, cancel_words, send_words, replacements.
+    # Чего здесь нет, берётся из ENGLISH_DEFAULTS.
+    english: dict = field(default_factory=lambda: copy.deepcopy(ENGLISH_DEFAULTS))
 
     # Enter в редакторе вставляет текст (Shift+Enter — новая строка, Ctrl+Enter — отправить).
     enter_confirms: bool = True
@@ -123,6 +158,15 @@ class Config:
             except Exception:
                 log.exception("не удалось прочитать %s — использую настройки по умолчанию", CONFIG_PATH)
         return cfg
+
+    def lang(self, code: str | None = None) -> Language:
+        """Настройки языка `code` (по умолчанию — текущего)."""
+        code = code if code in LANGUAGES else self.language if self.language in LANGUAGES else "ru"
+        if code == "en":
+            values = {**ENGLISH_DEFAULTS, **(self.english if isinstance(self.english, dict) else {})}
+        else:
+            values = {f.name: getattr(self, f.name) for f in fields(Language) if f.name != "code"}
+        return Language(code, **{f.name: values[f.name] for f in fields(Language) if f.name != "code"})
 
     def save(self) -> None:
         APP_DIR.mkdir(parents=True, exist_ok=True)

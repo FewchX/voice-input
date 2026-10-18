@@ -1,10 +1,12 @@
-# Voice Input (RU)
+# Voice Input (RU / EN)
 
-Russian voice typing into any text field on Windows. Speech recognition runs **locally** on Sber's GigaAM‑v3 model: no internet connection is needed, and audio never leaves your computer.
+Voice typing into any text field on Windows, in Russian or English. Speech recognition runs **locally**: Sber's GigaAM‑v3 for Russian, NVIDIA Parakeet for English. No internet connection is needed, and audio never leaves your computer.
 
 ![Dictation: text appears on the "island" as you speak](docs/screenshot-dictation.png)
 
 ## How to use
+
+The steps below use the Russian commands; the English ones are under [Languages](#languages).
 
 1. Put the cursor in any field (messenger, browser, IDE…) and **quickly press `\` twice**.
 2. An "island" slides down from the top of the screen. Speak, and the text appears as you go.
@@ -56,6 +58,23 @@ If there's no input field (the desktop or the taskbar is active), the island app
 
 Pasted text always stays in the clipboard and in the Win+V history. If the app couldn't get back to the original window, it pastes nothing and doesn't press Enter, but shows a notification. You can then paste the text yourself with Ctrl+V.
 
+## Languages
+
+Pick the recognition language in the **«Язык распознавания»** (Recognition language) tray menu: **Русский** or **English**. Only one model stays in memory. The first switch to English downloads its model (~660 MB); after that a switch takes about 5 seconds. While the new model loads, the previous one keeps working, and the choice is saved for the next launch.
+
+English uses its own model, NVIDIA Parakeet TDT 0.6B v2, which also adds punctuation and capital letters. It has its own command words:
+
+| Where | Action | By voice |
+|---|---|---|
+| Recording | finish and open the editor | "stop" at the end of a phrase |
+| Recording | paste and send right away | "send", "enter" as the last word |
+| Recording | cancel | "cancel" as a separate phrase |
+| Editor | paste | "okay", "ok", "done" as the last word |
+| Editor | paste and send | "send", "enter" as the last word |
+| Editor | cancel | "cancel" |
+
+The keyboard shortcuts are the same in both languages. Fillers "um", "uh", "hmm" are removed from English text. The hints on the island and in the editor show the command words of the current language; the rest of the interface stays in Russian.
+
 ## Styles
 
 The **«Стиль»** (Style) tray menu offers five options. When you pick one, the island appears for a few seconds with sample text.
@@ -90,19 +109,21 @@ Or double-click `run.pyw`, or use the **«Голосовой ввод»** ("Voic
 
 A blue microphone icon appears in the tray. Its menu has **«Запускать вместе с Windows»** ("Start with Windows", off by default), as well as the settings, the log and exit.
 
-On first launch the models (~850 MB) are downloaded from Hugging Face into `%USERPROFILE%\.cache\huggingface`. After that they load from disk in ~3 s, and no internet is needed anymore. Model versions are pinned (`PINNED_MODELS` in `engine.py`): exactly the files the app was tested with are downloaded, so model updates on Hugging Face won't break anything. The models are not part of the repository.
+On first launch the models (~850 MB) are downloaded from Hugging Face into `%USERPROFILE%\.cache\huggingface`; the English model (~660 MB) is downloaded the first time you switch to English. After that they load from disk in ~3 s, and no internet is needed anymore. Model versions are pinned (`PINNED_MODELS` in `engine.py`): exactly the files the app was tested with are downloaded, so model updates on Hugging Face won't break anything. The models are not part of the repository.
 
 ## Settings
 
 `%APPDATA%\VoiceInput\config.json` (opened from the tray menu; restart the app after editing):
 
+- `language`: recognition language, `ru` (default) or `en`; easier to switch from the tray;
 - `microphone`: `null` for the system microphone, otherwise a device number or part of its name;
 - `avoid_bluetooth_mic`: `true` (default): don't take a Bluetooth headset's microphone if there's another one;
 - `pause_ms`: how long a pause ends a phrase (default 700 ms);
 - `command_wait_ms`: how long to wait for silence after «стоп»/«отправить» while recording (default 1000 ms);
 - `auto_stop_s`: after how many seconds of silence recording stops by itself (default 20; `0` means never);
-- `stop_words`, `ok_words`, `send_words`, `cancel_words`: command words. A `~` before a word (`"~энтер"`) also matches it with one typo and in Latin letters;
-- `replacements`: the replacement dictionary (see above); `remove_fillers`: remove «а-а», «э-э»;
+- `stop_words`, `ok_words`, `send_words`, `cancel_words`: Russian command words. A `~` before a word (`"~энтер"`) also matches it with one typo and in Latin letters;
+- `replacements`: the replacement dictionary (see above); `remove_fillers`: remove «а-а», «э-э» (and "um", "uh" in English);
+- `english`: the same keys for English: `model`, `quantization`, `stop_words`, `ok_words`, `cancel_words`, `send_words`, `replacements`; missing keys take the defaults;
 - `send_key`: what sends after pasting: `enter` (default), or `ctrl+enter` for apps where Enter inserts a line break;
 - `double_tap_ms`: the time window for the double `\`;
 - `mouse_gesture`: the "left → right → left" mouse gesture (`true`/`false`); `mouse_gesture_ms`: how long to wait between its clicks (default 400 ms);
@@ -125,13 +146,13 @@ The log is written to `%APPDATA%\VoiceInput\voice.log`. It contains dictated tex
 .venv\Scripts\python.exe -m pytest
 ```
 
-The first command runs the fast tests (text, mouse gesture, pasting, log, microphone choice) in under a second. The second adds engine tests on the real model: synthesized speech from `tests/audio` is fed straight into the queue, and the microphone is never opened. That takes about a minute, at lowered priority. No test touches the keyboard, the mouse, focus or the clipboard.
+The first command runs the fast tests (text, mouse gesture, pasting, log, microphone choice) in under a second. The second adds engine tests on the real models, Russian and English, including a language switch on the fly: synthesized speech from `tests/audio` is fed straight into the queue, and the microphone is never opened. That takes about a minute, at lowered priority. No test touches the keyboard, the mouse, focus or the clipboard.
 
 ## How it works
 
 - `hotkey.py`: a low-level keyboard hook. Catches the double `\`, and during recording also Esc and Enter.
 - `mousehook.py`: a low-level mouse hook for the "left → right → left" gesture. It is installed after the model loads, so that the cursor doesn't stutter at startup.
-- `engine.py`: microphone (16 kHz) → Silero VAD cuts speech into phrases at pauses → GigaAM‑v3 e2e (with punctuation) recognizes them. The paragraph (up to ~14 s) is re-recognized in full after each phrase, so punctuation where phrases meet comes out right. The end of the phrase (up to 5 s) is also recognized on its own: in the paragraph text the model sometimes loses a short word after a pause, such as «стоп» or «энтер».
+- `engine.py`: microphone (16 kHz) → Silero VAD cuts speech into phrases at pauses → GigaAM‑v3 e2e (Russian) or Parakeet TDT 0.6B v2 (English), both with punctuation, recognizes them. Switching the language loads the other model in the background and swaps it in once it's ready. The paragraph (up to ~14 s) is re-recognized in full after each phrase, so punctuation where phrases meet comes out right. The end of the phrase (up to 5 s) is also recognized on its own: in the paragraph text the model sometimes loses a short word after a pause, such as «стоп» or «энтер».
 - `ui.py`: the recording island and the editor; `themes.py`: style colors and effects.
 - `inserter.py`: returns focus to the original window and pastes the text.
 - `textutils.py`: commands in the text, the replacement dictionary, filler cleanup; `logfile.py`: a log that remembers only the last few minutes.
@@ -154,6 +175,7 @@ Models and libraries are downloaded separately and come under their own licenses
 | Component | License |
 |---|---|
 | [GigaAM‑v3](https://github.com/salute-developers/GigaAM) (SberDevices) and its [ONNX version](https://huggingface.co/istupakov/gigaam-v3-onnx) | MIT |
+| [Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA) and its [ONNX version](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx) | CC-BY-4.0 |
 | [Silero VAD](https://github.com/snakers4/silero-vad) and its [ONNX version](https://huggingface.co/istupakov/silero-vad-onnx) | MIT |
 | [onnx-asr](https://github.com/istupakov/onnx-asr), ONNX Runtime, sounddevice | MIT |
 | huggingface_hub | Apache-2.0 |

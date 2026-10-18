@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 app = QApplication(sys.argv)
 
+from voice_input.config import Config  # noqa: E402
 from voice_input.themes import THEMES, Backdrop, blur, with_glow  # noqa: E402
 from voice_input.ui import SHADOW, TOP_GAP, Editor, Island  # noqa: E402
 
@@ -48,6 +49,7 @@ CONTACTS = [
 
 class FakeEngine:
     level = 0.6
+    lang = Config().lang()  # русские команды в подсказках
 
 
 def ui_font(size: float, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:

@@ -14,8 +14,8 @@ from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import inserter, win32
-from .config import CONFIG_PATH, Config
-from .engine import Engine
+from .config import CONFIG_PATH, LANGUAGES, Config
+from .engine import Engine, model_downloaded
 from .hotkey import KeyboardHook
 from .mousehook import MouseGesture
 from .themes import GLOWS, THEMES, Backdrop, get_theme, glow_key, with_glow
@@ -42,6 +42,7 @@ class Controller(QObject):
         self.cfg = cfg
         self.state = "idle"  # idle | recording | finishing | editing | inserting
         self.target = 0
+        self._switching_to: str | None = None  # язык, модель которого сейчас грузится
 
         self.engine = Engine(cfg)
         self.theme = with_glow(get_theme(cfg.theme), cfg.glow)
@@ -55,6 +56,7 @@ class Controller(QObject):
         self.engine.command_armed.connect(self.on_command_armed)
         self.engine.command.connect(self.on_voice_command)
         self.engine.model_state.connect(self.on_model_state)
+        self.engine.language_changed.connect(self.on_language_changed)
         self.engine.mic_error.connect(self.on_mic_error)
         self.engine.mic_live.connect(self.on_mic_live)
         self._session = 0
@@ -84,6 +86,15 @@ class Controller(QObject):
         start = QAction("Начать диктовку   (\\ \\)", menu)
         start.triggered.connect(lambda: QTimer.singleShot(150, self.on_hotkey))
         menu.addAction(start)
+        lang_menu = menu.addMenu("Язык распознавания")
+        lang_group = QActionGroup(lang_menu)
+        self._lang_actions: dict[str, QAction] = {}
+        for code, title in LANGUAGES.items():
+            action = QAction(title, lang_menu, checkable=True)
+            action.triggered.connect(lambda _=False, code=code: self.set_language(code))
+            lang_group.addAction(action)
+            lang_menu.addAction(action)
+            self._lang_actions[code] = action
         style_menu = menu.addMenu("Стиль")
         group = QActionGroup(style_menu)
         for theme in THEMES.values():
@@ -128,6 +139,11 @@ class Controller(QObject):
 
     def on_model_state(self, state: str) -> None:
         if state == "ready":
+            if self._switching_to == self.engine.lang.code:
+                # Модель языка из настроек не загрузилась, а выбранного потом в меню — да.
+                self._switching_to = None
+                self.cfg.language = self.engine.lang.code
+                self.cfg.save()
             self.tray.setToolTip("Голосовой ввод — дважды нажмите «\\»")
             if self.cfg.mouse_gesture:
                 self.mouse.start()
@@ -137,7 +153,35 @@ class Controller(QObject):
             self.tray.setToolTip("Голосовой ввод — ошибка загрузки модели")
             self.tray.showMessage("Голосовой ввод", "Не удалось загрузить модель. Подробности в логе.")
 
+    def set_language(self, code: str) -> None:
+        if code == (self._switching_to or self.engine.lang.code):
+            return
+        self._switching_to = code
+        lang = self.cfg.lang(code)
+        if not model_downloaded(lang.model, lang.quantization):
+            self.tray.showMessage(
+                "Голосовой ввод",
+                f"Скачиваю модель ({LANGUAGES[code]}), это пара минут. Пока распознаёт прежняя.",
+            )
+        self.tray.setToolTip(f"Голосовой ввод — загрузка модели ({LANGUAGES[code]})…")
+        self.engine.set_language(code)
+
+    def on_language_changed(self, code: str, ok: bool) -> None:
+        if code != self._switching_to:
+            return  # пока грузилась эта модель, выбрали другой язык — о ней не сообщаем
+        self._switching_to = None
+        self.tray.setToolTip("Голосовой ввод — дважды нажмите «\\»")
+        if not ok:
+            self.tray.showMessage("Голосовой ввод", "Не удалось загрузить модель — подробности в логе.")
+            return
+        self.cfg.language = code
+        self.cfg.save()
+        self.tray.showMessage("Голосовой ввод", f"Язык распознавания: {LANGUAGES[code]}")
+
     def _refresh_menu(self) -> None:
+        shown = self._switching_to or self.engine.lang.code
+        for code, action in self._lang_actions.items():
+            action.setChecked(code == shown)
         self.autostart_action.setChecked(autostart_enabled())
         # Цвет свечения есть только у стилей с подсветкой.
         self.glow_menu.setEnabled(self.theme.glow)

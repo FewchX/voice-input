@@ -138,4 +138,62 @@ def test_editor_commands(rec, parts, expected):
 @pytest.mark.parametrize("name", ["enter_ru", "enter_e", "enter_i", "enter_tr", "enter_en"])
 def test_model_hears_enter_variants(engine, name):
     text = engine._recognize(np.concatenate([sil(0.3), wav(name), sil(0.3)]))
-    assert textutils.ends_with(text, engine.cfg.send_words), text
+    assert textutils.ends_with(text, engine.lang.send_words), text
+
+
+# --------------------------------------------------------------------------- английский
+
+
+@pytest.fixture(scope="module")
+def rec_en(engine_en):
+    return Recorder(engine_en)
+
+
+def test_english_stop_opens_editor(rec_en):
+    ev = rec_en.run("dictation", "en_dict", 1.2, "en_stop", 2.5)
+    assert ev[-1][0] == "done" and ev[-1][2] is False
+    assert ev[-1][1].startswith("Hello") and not ev[-1][1].lower().endswith("stop.")
+
+
+@pytest.mark.parametrize("name, end", [("en_send_end", "today."), ("en_enter", "ready.")])
+def test_english_send_at_end(rec_en, name, end):
+    ev = rec_en.run("dictation", name, 2.5)
+    assert ev[0] == ("armed", "send")
+    _, text, send = ev[-1]
+    assert send and text.endswith(end), text
+
+
+def test_english_send_mid_sentence_is_text(rec_en):
+    assert rec_en.run("dictation", "en_send_mid", 2.5) == []
+
+
+def test_english_cancel_phrase(rec_en):
+    assert rec_en.run("dictation", "en_cancel", 1.5) == [("cancelled",)]
+
+
+@pytest.mark.parametrize(
+    "parts, expected",
+    [(("en_ok",), ["ok"]), (("en_send_end",), ["send"]), (("en_cancel",), ["cancel"]), (("en_dict",), [])],
+)
+def test_english_editor_commands(rec_en, parts, expected):
+    ev = rec_en.run("commands", *parts, 1.5)
+    assert [e[1] for e in ev if e[0] == "command"] == expected
+
+
+def test_switch_language(engine_en):
+    """Смена языка на ходу: новая модель грузится в фоне, потом распознаёт она; и обратно."""
+    results = []
+    engine_en.language_changed.connect(lambda code, ok: results.append((code, ok)), D)
+    try:
+        for code, audio, heard in (("ru", "dict1", "привет"), ("en", "en_dict", "hello")):
+            results.clear()
+            engine_en.set_language(code)
+            deadline = time.monotonic() + 120
+            while not results:
+                assert time.monotonic() < deadline, "модель не загрузилась"
+                time.sleep(0.1)
+            assert results == [(code, True)] and engine_en.lang.code == code
+            text = engine_en._recognize(np.concatenate([sil(0.3), wav(audio), sil(0.3)]))
+            assert heard in text.lower(), text
+    finally:
+        engine_en.language_changed.disconnect()

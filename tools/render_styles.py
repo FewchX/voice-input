@@ -27,6 +27,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication(sys.argv)
 
+from voice_input.config import Config  # noqa: E402
 from voice_input.themes import GLOWS, THEMES, Backdrop, blur, with_glow  # noqa: E402
 from voice_input.ui import Editor, Island  # noqa: E402
 
@@ -36,6 +37,7 @@ SAMPLE = "Привет. Ну вот это вот сейчас я говорю, 
 
 class FakeEngine:
     level = 0.55
+    lang = Config().lang()  # русские команды в подсказках
 
 
 def wallpaper(w: int, h: int, seed: int) -> QPixmap:
