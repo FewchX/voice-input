@@ -24,3 +24,10 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.1.1",
 ]
+speak = [
+    "piper-tts>=1.8.0",
+]
+
+[tool.uv]
+# Piper нужен только для озвучки Claude Code, но обычный `uv sync` не должен его удалять.
+default-groups = ["dev", "speak"]

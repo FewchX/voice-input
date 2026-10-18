@@ -19,8 +19,9 @@ from collections import deque
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from . import textutils
+from . import textutils, win32
 from .config import Config
+from .hub import pinned_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -53,17 +54,7 @@ def pinned_model_path(name: str) -> str | None:
     её как обычно найдёт и скачает onnx-asr (последнюю версию)."""
     if name not in PINNED_MODELS:
         return None
-    from huggingface_hub import snapshot_download
-
-    repo, revision, files = PINNED_MODELS[name]
-    try:
-        path = snapshot_download(repo, revision=revision, allow_patterns=files, local_files_only=True)
-        if all(os.path.isfile(os.path.join(path, f)) for f in files):
-            return path
-    except Exception:
-        pass  # ещё не скачана
-    log.info("скачиваю модель %s (%s, ревизия %s)…", name, repo, revision[:7])
-    return snapshot_download(repo, revision=revision, allow_patterns=files)
+    return pinned_snapshot(*PINNED_MODELS[name])
 
 
 def _session_options(threads: int):
@@ -251,6 +242,7 @@ class Engine(QObject):
         self._q: queue.Queue = queue.Queue()
         self._sid = 0
         self._stream = None
+        self._mic_flag = 0  # мьютекс «микрофон открыт» (см. win32.MIC_OPEN_MUTEX)
         self._loaded = threading.Event()
         self._asr = None
         self._vad_session = None
@@ -317,6 +309,7 @@ class Engine(QObject):
         if fake := os.environ.get("VOICE_INPUT_FAKE_MIC"):
             self._native_sr = SR
             self._stream = _FakeMic(fake, self._on_audio)
+            self._mic_flag = win32.create_mutex(win32.MIC_OPEN_MUTEX)
             return True
         device = self._resolve_device()
         try:
@@ -338,6 +331,7 @@ class Engine(QObject):
             self._native_sr = rate
         stream.start()
         self._stream = stream
+        self._mic_flag = win32.create_mutex(win32.MIC_OPEN_MUTEX)
         name = sd.query_devices(device, "input")["name"]
         log.info("микрофон %r открыт за %d мс (%d Гц)", name, (time.monotonic() - self._opened_at) * 1000, self._native_sr)
         return True
@@ -350,6 +344,8 @@ class Engine(QObject):
                 stream.close()
             except Exception:
                 log.exception("ошибка при закрытии микрофона")
+        win32.close_handle(self._mic_flag)
+        self._mic_flag = 0
         self.level = 0.0
 
     def _on_audio(self, indata, frames, time_info, status) -> None:

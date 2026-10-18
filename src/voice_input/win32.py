@@ -101,6 +101,12 @@ kernel32.GlobalFree.argtypes = [wt.HGLOBAL]
 kernel32.GlobalFree.restype = wt.HGLOBAL
 kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.LPCWSTR]
 kernel32.CreateMutexW.restype = wt.HANDLE
+kernel32.OpenMutexW.argtypes = [wt.DWORD, wt.BOOL, wt.LPCWSTR]
+kernel32.OpenMutexW.restype = wt.HANDLE
+kernel32.ReleaseMutex.argtypes = [wt.HANDLE]
+kernel32.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+kernel32.WaitForSingleObject.restype = wt.DWORD
+kernel32.CloseHandle.argtypes = [wt.HANDLE]
 
 
 # --------------------------------------------------------------------------- клавиатура
@@ -306,6 +312,34 @@ def single_instance(name: str) -> bool:
 
 
 _mutex = None
+
+# Пока открыт микрофон, существует этот мьютекс: по нему озвучка Claude (claude_hook.py) молчит,
+# чтобы её голос не попал в диктовку. Если приложение упадёт, Windows уберёт мьютекс сама.
+MIC_OPEN_MUTEX = "Local\\VoiceInputMicOpen"
+SYNCHRONIZE = 0x00100000
+
+
+def create_mutex(name: str) -> int:
+    return kernel32.CreateMutexW(None, False, name) or 0
+
+
+def close_handle(handle: int) -> None:
+    if handle:
+        kernel32.CloseHandle(handle)
+
+
+def mutex_exists(name: str) -> bool:
+    handle = kernel32.OpenMutexW(SYNCHRONIZE, False, name)
+    close_handle(handle)
+    return bool(handle)
+
+
+def acquire_mutex(handle: int, timeout_ms: int) -> bool:
+    return kernel32.WaitForSingleObject(handle, timeout_ms) in (0, 0x80)  # WAIT_OBJECT_0, WAIT_ABANDONED
+
+
+def release_mutex(handle: int) -> None:
+    kernel32.ReleaseMutex(handle)
 
 # --------------------------------------------------------------------------- буфер обмена
 
