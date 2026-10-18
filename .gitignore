@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Цвет папки в Проводнике (FolderColors) — к проекту не относится.
+desktop.ini
