@@ -35,6 +35,37 @@ CANCEL_MAX_S = 2.5  # «отмена» во время записи — коро
 GAP = np.zeros(int(0.15 * SR), dtype=np.float32)
 
 
+# Проверенные версии моделей на Hugging Face. Без ревизии берётся последняя, и обновление у автора
+# могло бы незаметно поменять распознавание. Скачиваются при первом запуске в кэш Hugging Face.
+PINNED_MODELS = {
+    "gigaam-v3-e2e-rnnt": (
+        "istupakov/gigaam-v3-onnx",
+        "322c3b29492673eb7d0b434bfa9dfb8653e34d02",
+        ["config.json", "v3_e2e_rnnt_encoder.onnx", "v3_e2e_rnnt_decoder.onnx", "v3_e2e_rnnt_joint.onnx",
+         "v3_e2e_rnnt_vocab.txt"],
+    ),
+    "silero": ("istupakov/silero-vad-onnx", "b3e3ee3cce4c11ceb63b1a0b229d916069c1ddf6", ["config.json", "silero_vad.onnx"]),
+}
+
+
+def pinned_model_path(name: str) -> str | None:
+    """Папка с закреплённой версией модели (скачивается, если её ещё нет). None — модель не из списка:
+    её как обычно найдёт и скачает onnx-asr (последнюю версию)."""
+    if name not in PINNED_MODELS:
+        return None
+    from huggingface_hub import snapshot_download
+
+    repo, revision, files = PINNED_MODELS[name]
+    try:
+        path = snapshot_download(repo, revision=revision, allow_patterns=files, local_files_only=True)
+        if all(os.path.isfile(os.path.join(path, f)) for f in files):
+            return path
+    except Exception:
+        pass  # ещё не скачана
+    log.info("скачиваю модель %s (%s, ревизия %s)…", name, repo, revision[:7])
+    return snapshot_download(repo, revision=revision, allow_patterns=files)
+
+
 def _session_options(threads: int):
     """Без «прокрутки» потоков: по умолчанию ONNX Runtime держит их в активном ожидании,
     и короткие частые вызовы (VAD — 31 раз в секунду) съедают четверть процессора впустую."""
@@ -348,9 +379,11 @@ class Engine(QObject):
 
             t = time.monotonic()
             asr_threads = max(1, min(8, (os.cpu_count() or 2) // 2))
-            self._vad_session = onnx_asr.load_vad("silero", sess_options=_session_options(1))._model
+            vad_path = pinned_model_path("silero")
+            self._vad_session = onnx_asr.load_vad("silero", vad_path, sess_options=_session_options(1))._model
+            asr_path = pinned_model_path(self.cfg.model) if self.cfg.quantization is None else None
             self._asr = onnx_asr.load_model(
-                self.cfg.model, quantization=self.cfg.quantization, sess_options=_session_options(asr_threads)
+                self.cfg.model, asr_path, quantization=self.cfg.quantization, sess_options=_session_options(asr_threads)
             )
             self._asr.recognize(np.zeros(SR, dtype=np.float32), sample_rate=SR)  # прогрев
             log.info("модель %s загружена за %.1f с", self.cfg.model, time.monotonic() - t)

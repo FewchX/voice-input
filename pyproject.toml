@@ -3,6 +3,8 @@ name = "voice-input"
 version = "0.1.0"
 description = "Голосовой ввод на русском с локальным распознаванием (GigaAM-v3)"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.5.4",
