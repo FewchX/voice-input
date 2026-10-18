@@ -199,6 +199,7 @@ class Island(QWidget):
 
         self._text = ""
         self._status = "listening"  # listening | loading (модель) | starting (микрофон) | processing
+        self._armed = ""  # "stop" | "send": команда сказана, ждём секунду тишины
         self._body: QTextLayout | None = None
         self._body_h = 0.0
         self._t0 = time.monotonic()
@@ -228,6 +229,7 @@ class Island(QWidget):
         self._demo = demo
         self._text = self.DEMO_TEXT.format(self.theme.title) if demo else ""
         self._status = status or ("loading" if loading else "listening")
+        self._armed = ""
         self._relayout()
         self._t0 = time.monotonic()
         self._levels = deque([0.0] * self.BARS, maxlen=self.BARS)
@@ -282,6 +284,10 @@ class Island(QWidget):
         self._status = status
         self._relayout()
         self._animate_height()
+
+    def set_armed(self, command: str) -> None:
+        self._armed = command
+        self.update()
 
     def card_rect_global(self) -> QRect:
         r = self._card_rect().toRect()
@@ -383,9 +389,13 @@ class Island(QWidget):
         p.setFont(self.label_font)
         p.setPen(t.text)
         label = {"loading": "Подготовка", "starting": "Подготовка", "processing": "Обработка"}.get(self._status, "Слушаю")
-        p.drawText(QRectF(x0 + self.PAD + 38, y0, 120, self.HEADER + 4), Qt.AlignmentFlag.AlignVCenter, label)
+        if self._status == "listening" and self._armed:
+            label = {"send": "Отправлю…", "stop": "Готово…"}[self._armed]
+        label_w = p.fontMetrics().horizontalAdvance(label)
+        p.drawText(QRectF(x0 + self.PAD + 38, y0, label_w + 4, self.HEADER + 4), Qt.AlignmentFlag.AlignVCenter, label)
 
-        self._paint_wave(p, QRectF(x0 + 150, mid_y - 14, self.WIDTH - 150 - 76, 28))
+        wave_x = max(150, self.PAD + 38 + label_w + 14)  # длинная подпись («Отправлю…») сдвигает волну
+        self._paint_wave(p, QRectF(x0 + wave_x, mid_y - 14, self.WIDTH - wave_x - 76, 28))
 
         elapsed = int(time.monotonic() - self._t0)
         p.setFont(self.timer_font)
@@ -407,7 +417,10 @@ class Island(QWidget):
 
         p.setFont(self.hint_font)
         p.setPen(alpha(t.muted, t.muted.alphaF() * 0.9))
-        hint = "Скажите «стоп», чтобы закончить   ·   Enter — готово   ·   Esc — отмена"
+        if self._armed:
+            hint = "Продолжите говорить, чтобы не останавливаться   ·   Esc — отмена"
+        else:
+            hint = "«стоп» — в редактор   ·   «отправить» — сразу   ·   Esc — отмена"
         p.drawText(
             QRectF(x0 + self.PAD, card.bottom() - self.hint_fm.height() - 12, self.WIDTH - 2 * self.PAD, 20),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,

@@ -14,6 +14,39 @@ APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VoiceInput"
 CONFIG_PATH = APP_DIR / "config.json"
 
 
+# Программистские слова, которые модель пишет по-своему («гит» слышит как «гид», «Клода» — как «клада»).
+DEFAULT_REPLACEMENTS = {
+    "гид": "git",
+    "гит": "git",
+    "гита": "git",
+    "гиту": "git",
+    "гитом": "git",
+    "гите": "git",
+    "гитхаб": "GitHub",
+    "гидхаб": "GitHub",
+    "гитхабе": "GitHub",
+    "гитхаба": "GitHub",
+    "клод": "Claude",
+    "клода": "Claude",
+    "клоду": "Claude",
+    "клодом": "Claude",
+    "клоде": "Claude",
+    "клот": "Claude",
+    "клота": "Claude",
+    "клоту": "Claude",
+    "клада": "Claude",
+    "clod": "Claude",
+    "claud": "Claude",
+    "клод код": "Claude Code",
+    "клот код": "Claude Code",
+    "кладкод": "Claude Code",
+    "клодкод": "Claude Code",
+    "пол реквест": "пулл-реквест",
+    "пул реквест": "пулл-реквест",
+    "мёртж": "мёрж",
+}
+
+
 @dataclass
 class Config:
     # Модель распознавания (onnx-asr). e2e-версии GigaAM сами расставляют пунктуацию.
@@ -21,6 +54,9 @@ class Config:
     quantization: str | None = None
     # Микрофон: null — системный по умолчанию, либо номер/часть названия устройства.
     microphone: int | str | None = None
+    # Если системный микрофон — Bluetooth-наушники, брать другой (встроенный): иначе Windows переводит
+    # наушники в телефонный режим и звук в них становится глухим. Другого микрофона нет — берём наушники.
+    avoid_bluetooth_mic: bool = True
 
     double_tap_ms: int = 350
     # Жест мышью: быстро ЛКМ → ПКМ → ЛКМ на одном месте (не дольше mouse_gesture_ms между кликами).
@@ -28,6 +64,10 @@ class Config:
     mouse_gesture_ms: int = 400
     # Пауза, после которой фраза считается законченной (и проверяется «стоп»).
     pause_ms: int = 700
+    # После «стоп»/«отправить» в конце фразы ждём ещё столько тишины; заговоришь раньше — команда отменится.
+    command_wait_ms: int = 1000
+    # Столько секунд без речи — и запись останавливается сама (текст уходит в буфер обмена). 0 — не останавливать.
+    auto_stop_s: int = 20
     vad_threshold: float = 0.5
 
     # «stop» — модель иногда записывает «стоп» латиницей.
@@ -43,6 +83,11 @@ class Config:
     # Чем отправлять: "enter" (мессенджеры, чаты) или "ctrl+enter" (Slack с настройкой, почта и т.п.).
     send_key: str = "enter"
 
+    # Словарь замен: как модель пишет → как нужно. Слова и фразы целиком, регистр и ё/е не важны.
+    replacements: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_REPLACEMENTS))
+    # Убирать «а-а», «э-э», «м-м» и подобные.
+    remove_fillers: bool = True
+
     # Enter в редакторе вставляет текст (Shift+Enter — новая строка, Ctrl+Enter — отправить).
     enter_confirms: bool = True
     # clipboard — через буфер обмена и Ctrl+V; type — посимвольно.
@@ -50,6 +95,8 @@ class Config:
     # Оставлять вставленный текст в буфере обмена (и в истории Win+V) — на случай, если вставка не дошла.
     # false — после вставки вернуть в буфер то, что там было.
     keep_in_clipboard: bool = True
+    # Сколько минут хранить лог (в нём текст диктовок и названия окон); 0 — не чистить (до ~3 МБ).
+    log_minutes: int = 5
     # Стиль окон: island | siri | dark_glass | glass | light (переключается в меню трея).
     theme: str = "dark_glass"
     # Цвет свечения для стилей с подсветкой: white | orange | blue | purple | pink | green | rainbow

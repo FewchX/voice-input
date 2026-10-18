@@ -51,6 +51,8 @@ class Controller(QObject):
         self.engine.text_changed.connect(self.on_text)
         self.engine.dictation_done.connect(self.on_dictation_done)
         self.engine.dictation_cancelled.connect(self.cancel_recording)
+        self.engine.dictation_idle.connect(self.on_dictation_idle)
+        self.engine.command_armed.connect(self.on_command_armed)
         self.engine.command.connect(self.on_voice_command)
         self.engine.model_state.connect(self.on_model_state)
         self.engine.mic_error.connect(self.on_mic_error)
@@ -255,6 +257,25 @@ class Controller(QObject):
         self.engine.stop()
         self.island.dismiss()
         self.state = "idle"
+
+    def on_command_armed(self, command: str) -> None:
+        if self.state == "recording":
+            self.island.set_armed(command)
+
+    def on_dictation_idle(self, text: str) -> None:
+        """Долго молчали — запись остановлена сама. Микрофон не держим, текст не теряем."""
+        if self.state not in ("recording", "finishing"):
+            return
+        self.hook.capture_keys = False
+        self.engine.stop()
+        self.island.dismiss()
+        self.state = "idle"
+        if text:
+            win32.clipboard_set_text(text, temporary=False)
+            self.tray.showMessage(
+                "Голосовой ввод",
+                f"{self.cfg.auto_stop_s} с тишины — запись остановлена, текст в буфере обмена (Ctrl+V).",
+            )
 
     def on_dictation_done(self, text: str, send: bool) -> None:
         if self.state not in ("recording", "finishing"):

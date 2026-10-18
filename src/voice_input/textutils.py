@@ -84,6 +84,66 @@ def is_command(text: str, words: list[str]) -> bool:
     return all(any(_matches([t], target, fuzzy) for target, fuzzy in single) for t in tokens)
 
 
+# --------------------------------------------------------------------------- чистка текста
+
+# «а-а», «э-э-э», «м-м», «ммм», «эм» — паразиты. Одиночные «а», «э» не трогаем: «а» — обычный союз.
+_FILLER = re.compile(r"(?<![\w-])(?:([аэм])(?:-?\1)+|эм+)(?![\w-])[,.!?…]*\s*", re.IGNORECASE)
+_CAP = "\x00"  # метка: следующее слово начинает предложение
+
+
+def remove_fillers(text: str) -> str:
+    """«А-а я бы хотел, э-э, попробовать» → «Я бы хотел, попробовать»."""
+
+    def drop(m: re.Match) -> str:
+        return _CAP if m.group(0)[0].isupper() else ""
+
+    text = _FILLER.sub(drop, text)
+    text = re.sub(_CAP + r"\s*(\W*)(\w)", lambda m: m.group(1) + m.group(2).upper(), text).replace(_CAP, "")
+    text = re.sub(r"\s+([,.!?…])", r"\1", text)  # «слово ,» → «слово,»
+    text = re.sub(r",\s*([.!?…])", r"\1", text)  # «слово, .» → «слово.»
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text.lstrip(",;:—– ").rstrip(",;:—– ")
+
+
+_PATTERNS: dict[tuple, list[tuple[re.Pattern, str]]] = {}
+
+
+def _replacement_patterns(replacements: dict[str, str]) -> list[tuple[re.Pattern, str]]:
+    key = tuple(replacements.items())
+    if key not in _PATTERNS:
+        out = []
+        # Сначала длинные фразы: «клод код» раньше, чем «клод».
+        for src in sorted(replacements, key=lambda s: (-len(s.split()), -len(s))):
+            words = ["".join("[её]" if c in "её" else c for c in re.escape(w)) for w in src.lower().split()]
+            if words:
+                rx = re.compile(r"(?<![\w-])" + r"[\s-]+".join(words) + r"(?![\w-])", re.IGNORECASE)
+                out.append((rx, replacements[src]))
+        _PATTERNS[key] = out
+    return _PATTERNS[key]
+
+
+def apply_replacements(text: str, replacements: dict[str, str]) -> str:
+    """Словарь замен: «гид статус» → «git статус», «кладкод» → «Claude Code». Регистр и ё/е не важны."""
+
+    def put(value: str):
+        def sub(m: re.Match) -> str:
+            # В начале предложения «Гид…» → «Git…», а не «git…».
+            return value[:1].upper() + value[1:] if m.group(0)[:1].isupper() and value[:1].islower() else value
+
+        return sub
+
+    for rx, value in _replacement_patterns(replacements):
+        text = rx.sub(put(value), text)
+    return text
+
+
+def clean(text: str, replacements: dict[str, str], fillers: bool = True) -> str:
+    """Финальная чистка распознанного текста перед показом и вставкой."""
+    if fillers:
+        text = remove_fillers(text)
+    return apply_replacements(text, replacements) if replacements else text
+
+
 def join_text(left: str, right: str) -> str:
     left, right = left.strip(), right.strip()
     if not left or not right:

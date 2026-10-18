@@ -130,6 +130,44 @@ class Segmenter:
         return audio
 
 
+# Микрофон Bluetooth-наушников работает только через профиль Hands-Free: пока он открыт,
+# звук в наушниках становится «телефонным» — моно и глухим.
+_BT_MARKERS = ("bthhfenum", "hands-free", "головной телефон")
+# «Переназначение звуковых устр.» и «Первичный драйвер» следуют за системным устройством, микшер — не микрофон.
+_NOT_A_MIC = ("переназначение", "sound mapper", "первичный драйвер", "primary sound", "стерео микшер", "stereo mix")
+
+
+def _paren(name: str) -> str:
+    """«Микрофон (LE-Bose QC Ultra He» → «LE-Bose QC Ultra He» (MME обрезает имена до 31 символа)."""
+    i = name.rfind("(")
+    return name[i + 1 :].rstrip(")").strip() if i >= 0 else ""
+
+
+def pick_non_bluetooth(devices: list[dict], default: int) -> int:
+    """Если системный микрофон — Bluetooth-наушники, возвращает другой микрофон того же типа драйвера."""
+    # Имена Bluetooth-устройств видны в WDM-KS: «Головной телефон (@...bthhfenum.sys...;(LE-Bose QC Ultra Headphones))».
+    bt_names = {_paren(d["name"]) for d in devices if any(m in d["name"].lower() for m in _BT_MARKERS)}
+    bt_names.discard("")
+
+    def bluetooth(name: str) -> bool:
+        low, part = name.lower(), _paren(name)
+        return any(m in low for m in _BT_MARKERS) or (len(part) >= 6 and any(b.startswith(part) for b in bt_names))
+
+    if not bluetooth(devices[default]["name"]):
+        return default
+    api = devices[default]["hostapi"]
+    for i, d in enumerate(devices):
+        name = d["name"].lower()
+        if (
+            d["hostapi"] == api
+            and d["max_input_channels"] > 0
+            and not bluetooth(d["name"])
+            and not any(m in name for m in _NOT_A_MIC)
+        ):
+            return i
+    return default  # другого микрофона нет — пусть будет телефонный режим, чем никакого
+
+
 class _FakeMic:
     """Для тестов: «микрофон», который в реальном времени читает WAV (16 кГц, моно, 16 бит)."""
 
@@ -162,6 +200,8 @@ class Engine(QObject):
     text_changed = Signal(str)
     dictation_done = Signal(str, bool)  # текст; True — сразу вставить и отправить
     dictation_cancelled = Signal()  # во время записи сказали «отмена»
+    dictation_idle = Signal(str)  # auto_stop_s без речи — запись остановлена, вот что успели надиктовать
+    command_armed = Signal(str)  # "stop" | "send" — ждём тишины, чтобы выполнить; "" — речь продолжилась
     command = Signal(str)  # "ok" | "send" | "cancel"
     mic_error = Signal(str)
     mic_live = Signal()  # микрофон начал отдавать настоящий звук
@@ -214,12 +254,25 @@ class Engine(QObject):
         import sounddevice as sd
 
         dev = self.cfg.microphone
-        if dev is None or isinstance(dev, int):
+        if isinstance(dev, int):
             return dev
-        for i, info in enumerate(sd.query_devices()):
-            if info["max_input_channels"] > 0 and str(dev).lower() in info["name"].lower():
-                return i
-        log.warning("микрофон %r не найден — беру системный", dev)
+        devices = sd.query_devices()
+        if dev is not None:
+            for i, info in enumerate(devices):
+                if info["max_input_channels"] > 0 and str(dev).lower() in info["name"].lower():
+                    return i
+            log.warning("микрофон %r не найден — беру системный", dev)
+        default = sd.default.device[0]
+        if not self.cfg.avoid_bluetooth_mic or default is None or default < 0:
+            return None
+        pick = pick_non_bluetooth(list(devices), default)
+        if pick != default:
+            log.info(
+                "системный микрофон %r — Bluetooth (наушники ушли бы в телефонный режим), беру %r",
+                devices[default]["name"],
+                devices[pick]["name"],
+            )
+            return pick
         return None
 
     def _open_mic(self) -> bool:
@@ -316,6 +369,9 @@ class Engine(QObject):
             log.exception("ошибка распознавания")
             return ""
 
+    def _clean(self, text: str) -> str:
+        return textutils.clean(text, self.cfg.replacements, self.cfg.remove_fillers)
+
     # ------------------------------------------------------------------ фоновый поток
 
     def _worker(self) -> None:
@@ -336,12 +392,19 @@ class Engine(QObject):
                 parts.append(a)
             return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
 
+        armed: str | None = None  # "stop" | "send": команда сказана, ждём тишины, чтобы выполнить
+        armed_quiet = 0  # чанков тишины с тех пор
+        idle = 0  # чанков без речи подряд — для автоостановки
+
+        def command_words(command: str | None) -> list[str]:
+            return self.cfg.send_words if command == "send" else self.cfg.stop_words
+
         def finish(send: bool = False) -> None:
-            nonlocal mode
-            words = self.cfg.send_words if send else self.cfg.stop_words
+            nonlocal mode, armed
+            words = command_words("send" if send or armed == "send" else "stop")
             text, _ = textutils.strip_trailing_word(textutils.join_text(committed, pending), words)
-            mode = "idle"
-            self.dictation_done.emit(text, send)
+            mode, armed = "idle", None
+            self.dictation_done.emit(self._clean(text), send)
 
         while True:
             item = self._q.get()
@@ -352,6 +415,7 @@ class Engine(QObject):
                 seg.reset()
                 buf = np.zeros(0, dtype=np.float32)
                 phrases, committed, pending = [], "", ""
+                armed, armed_quiet, idle = None, 0, 0
                 continue
 
             if item[1] != sid:
@@ -392,6 +456,28 @@ class Engine(QObject):
                     continue
 
                 # mode == "dictation"
+                idle = 0 if seg.in_speech else idle + 1
+                if self.cfg.auto_stop_s and idle * CHUNK_MS >= self.cfg.auto_stop_s * 1000:
+                    text = self._clean(textutils.join_text(committed, pending))
+                    log.info("%d с без речи — останавливаю запись (%d символов)", self.cfg.auto_stop_s, len(text))
+                    mode, armed = "idle", None
+                    self.dictation_idle.emit(text)
+                    break
+
+                if armed and phrase is None:
+                    if seg.in_speech:
+                        # Продолжил говорить — «стоп»/«отправить» было частью речи.
+                        log.info("речь продолжилась — «%s» отменён", armed)
+                        armed = None
+                        self.command_armed.emit("")
+                    else:
+                        armed_quiet += 1
+                        if armed_quiet * CHUNK_MS >= self.cfg.command_wait_ms:
+                            log.info("тишина после «%s» — выполняю", armed)
+                            finish(send=armed == "send")
+                            break
+                    continue
+
                 if phrase is not None:
                     phrases.append(phrase)
                     pending = self._recognize(paragraph())
@@ -414,15 +500,17 @@ class Engine(QObject):
                     def said(words: list[str]) -> bool:
                         return textutils.strip_trailing_word(full, words)[1] or textutils.ends_with(alone, words)
 
-                    if said(self.cfg.stop_words):
-                        finish()
-                        break
-                    # «…отправить» / «…энтер» в конце — сразу вставляем и отправляем, без редактора.
-                    if said(self.cfg.send_words):
-                        log.info("в конце команда отправки — отправляю без редактора")
-                        finish(send=True)
-                        break
-                    self.text_changed.emit(full)
+                    # «…стоп» — в редактор, «…отправить» / «…энтер» — сразу вставить и отправить.
+                    # Выполняем не сразу, а после command_wait_ms тишины: если речь продолжится,
+                    # значит, слово было частью фразы.
+                    armed = "stop" if said(self.cfg.stop_words) else "send" if said(self.cfg.send_words) else None
+                    shown = full
+                    if armed:
+                        armed_quiet = 0
+                        shown = textutils.strip_trailing_word(full, command_words(armed))[0]
+                        log.info("в конце «%s» — жду %d мс тишины", armed, self.cfg.command_wait_ms)
+                        self.command_armed.emit(armed)
+                    self.text_changed.emit(self._clean(shown))
                     if sum(len(p) for p in phrases) >= PARAGRAPH_MAX_S * SR:
                         committed, pending, phrases = full, "", []
                 elif seg.in_speech and time.monotonic() >= next_partial:
@@ -434,4 +522,4 @@ class Engine(QObject):
                         partial = self._recognize(current)
                         spent = time.monotonic() - t
                         next_partial = t + max(PARTIAL_EVERY_S, 3 * spent)
-                        self.text_changed.emit(textutils.join_text(committed, textutils.join_text(pending, partial)))
+                        self.text_changed.emit(self._clean(textutils.join_text(committed, textutils.join_text(pending, partial))))
