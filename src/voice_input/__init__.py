@@ -41,8 +41,11 @@ def main() -> None:
 
     from . import win32
 
+    log = logging.getLogger(__name__)
+    log.info("запуск (pid %d)", os.getpid())
     if not win32.single_instance("Local\\VoiceInput.SingleInstance"):
-        logging.getLogger(__name__).info("уже запущен — выхожу")
+        shown = win32.signal_event(win32.SHOW_EVENT)
+        log.info("уже запущен — %s и выхожу", "показал уведомление" if shown else "уведомить не удалось")
         return
 
     from PySide6.QtWidgets import QApplication

@@ -76,6 +76,14 @@ class Controller(QObject):
         self.mouse = MouseGesture(self._gesture.emit, cfg.mouse_gesture_ms)
 
         self.tray = self._make_tray()
+        self._show_event = win32.create_event(win32.SHOW_EVENT)
+        threading.Thread(target=self._wait_relaunch, name="relaunch", daemon=True).start()
+
+    def _wait_relaunch(self) -> None:
+        """Ярлык нажали, когда приложение уже работает: показываем, что оно на месте."""
+        while win32.wait_event(self._show_event):
+            log.info("повторный запуск — уже работаю")
+            self._notify.emit("Уже работает: дважды нажмите «\\» в любом поле. Значок — в трее.")
 
     # ----------------------------------------------------------------- трей
 
@@ -149,6 +157,9 @@ class Controller(QObject):
                 self.mouse.start()
             if self.state == "recording":
                 self.island.set_status("listening" if self.engine.live else "starting")
+            else:
+                # Значок в трее Windows часто прячет — без уведомления запуск не заметить.
+                self.tray.showMessage("Голосовой ввод", "Запущен: дважды нажмите «\\» в любом поле, чтобы диктовать.")
         elif state == "error":
             self.tray.setToolTip("Голосовой ввод — ошибка загрузки модели")
             self.tray.showMessage("Голосовой ввод", "Не удалось загрузить модель. Подробности в логе.")

@@ -102,6 +102,13 @@ kernel32.GlobalFree.restype = wt.HGLOBAL
 kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.LPCWSTR]
 kernel32.CreateMutexW.restype = wt.HANDLE
 kernel32.CloseHandle.argtypes = [wt.HANDLE]
+kernel32.CreateEventW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.BOOL, wt.LPCWSTR]
+kernel32.CreateEventW.restype = wt.HANDLE
+kernel32.OpenEventW.argtypes = [wt.DWORD, wt.BOOL, wt.LPCWSTR]
+kernel32.OpenEventW.restype = wt.HANDLE
+kernel32.SetEvent.argtypes = [wt.HANDLE]
+kernel32.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+kernel32.WaitForSingleObject.restype = wt.DWORD
 
 
 # --------------------------------------------------------------------------- клавиатура
@@ -307,6 +314,30 @@ def single_instance(name: str) -> bool:
 
 
 _mutex = None
+
+# Повторный запуск (ещё раз ярлык) будит работающий экземпляр этим событием, и тот показывает уведомление:
+# иначе запуск, когда приложение уже в трее, выглядел бы как «ярлык не работает».
+SHOW_EVENT = "Local\\VoiceInput.Show"
+EVENT_MODIFY_STATE = 0x0002
+INFINITE = 0xFFFFFFFF
+
+
+def create_event(name: str) -> int:
+    return kernel32.CreateEventW(None, False, False, name) or 0  # сбрасывается сам, после каждого ожидания
+
+
+def signal_event(name: str) -> bool:
+    handle = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, name)
+    if not handle:
+        return False
+    try:
+        return bool(kernel32.SetEvent(handle))
+    finally:
+        close_handle(handle)
+
+
+def wait_event(handle: int, timeout_ms: int = INFINITE) -> bool:
+    return kernel32.WaitForSingleObject(handle, timeout_ms) == 0  # WAIT_OBJECT_0
 
 # Пока открыт микрофон, существует этот мьютекс: по нему другие программы (например, синтез речи)
 # могут молчать, чтобы их звук не попал в диктовку. Если приложение упадёт, Windows уберёт его сама.
